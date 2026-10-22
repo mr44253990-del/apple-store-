@@ -69,7 +69,7 @@ export const TodayTab: React.FC = () => {
               Welcome to App Store
             </h2>
             <p className="text-sm text-black/60 dark:text-white/60">
-              Demo apps removed. The store is clean and ready for your real applications.
+              Demo applications deleted as requested. The store is clean, connected to Supabase, and ready for your real applications.
             </p>
           </div>
 

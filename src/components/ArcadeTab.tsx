@@ -85,7 +85,7 @@ export const ArcadeTab: React.FC = () => {
               No Arcade Games Published Yet
             </h3>
             <p className="text-xs text-black/50 dark:text-white/50 max-w-sm mx-auto">
-              অ্যাডমিন প্যানেল থেকে আর্কেড ক্যাটাগরিতে গেম যোগ করুন।
+              Add games in the Arcade category from the App Store Connect Admin panel.
             </p>
           </div>
         )}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Sun, Moon, User, ShieldCheck } from 'lucide-react';
+import { Search, Sun, Moon, User, ShieldCheck, Database, Cloud } from 'lucide-react';
 import { useAppStore } from '../context/AppContext.tsx';
 
 export const Header: React.FC = () => {
@@ -20,10 +20,10 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-30 h-16 border-b border-white/10 bg-black/80 backdrop-blur-xl px-4 md:px-8 flex items-center justify-between gap-4 transition-colors duration-300">
+    <header className="sticky top-0 z-30 h-16 border-b border-black/[0.06] dark:border-white/[0.08] bg-[#f5f5f7]/80 dark:bg-[#000000]/80 backdrop-blur-xl px-4 md:px-8 flex items-center justify-between gap-4 transition-colors">
       {/* Search Input Bar */}
       <div className="flex-1 max-w-md relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-black/40 dark:text-white/40" />
         <input
           type="text"
           value={searchQuery}
@@ -38,29 +38,39 @@ export const Header: React.FC = () => {
               setCurrentTab('search');
             }
           }}
-          placeholder="অ্যাপলিকেশন নাম লিখে সার্চ করুন / Search apps..."
-          className="w-full pl-10 pr-4 py-2 text-sm bg-white/10 hover:bg-white/20 focus:bg-white/30 text-[#f5f5f7] placeholder-white/40 rounded-full border border-transparent focus:border-[#0071e3] transition-all outline-none"
+          placeholder="Search apps, games, stories & #tags..."
+          className="w-full pl-10 pr-4 py-2 text-sm bg-black/[0.05] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] focus:bg-white dark:focus:bg-[#1c1c1e] text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-black/40 dark:placeholder-white/40 rounded-full border border-transparent focus:border-[#0071e3] transition-all outline-none"
         />
       </div>
 
       {/* Right Controls */}
       <div className="flex items-center gap-2 md:gap-3">
+        {/* Supabase status badge */}
+        <div
+          title={`Supabase: ${cloudSyncStatus === 'synced' ? 'Connected & Synced' : 'Ready / Active'}`}
+          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-black/[0.04] dark:bg-white/[0.06] text-black/70 dark:text-white/70"
+        >
+          <Database className="w-3.5 h-3.5 text-[#3ecf8e]" />
+          <span>Supabase</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        </div>
+
         {/* Light / Dark Mode Toggle */}
         <button
           onClick={toggleTheme}
-          aria-label="ডার্ক / লাইট থিম টগল করুন / Toggle Dark / Light Theme"
-          className="p-2 rounded-full text-white/70 hover:bg-white/10 transition-colors"
+          aria-label="Toggle Dark / Light Theme"
+          className="p-2 rounded-full text-black/70 dark:text-white/70 hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition-colors"
         >
           {settings.theme_mode === 'dark' ? (
             <Sun className="w-4 h-4 text-amber-400" />
           ) : (
-            <Moon className="w-4 h-4 text-slate-300" />
+            <Moon className="w-4 h-4 text-slate-700" />
           )}
         </button>
 
         {/* User Account / Apple ID */}
         {user ? (
-          <div className="flex items-center gap-2 pl-2 border-l border-white/10">
+          <div className="flex items-center gap-2 pl-2 border-l border-black/[0.08] dark:border-white/[0.1]">
             <button
               onClick={() => {
                 if (user.is_admin) {
@@ -69,7 +79,7 @@ export const Header: React.FC = () => {
                   setIsLoginModalOpen(true);
                 }
               }}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] transition-colors"
             >
               <div className="w-6 h-6 rounded-full bg-[#0071e3] text-white flex items-center justify-center text-xs font-semibold overflow-hidden">
                 {user.avatar_url ? (
