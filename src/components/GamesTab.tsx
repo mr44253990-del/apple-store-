@@ -104,7 +104,7 @@ export const GamesTab: React.FC = () => {
               No Games Published Yet
             </h3>
             <p className="text-xs text-black/50 dark:text-white/50 max-w-sm mx-auto">
-              Publish games via App Store Connect Admin with direct download file links.
+              অ্যাডমিন প্যানেল থেকে গেম publish করুন ডিরেক্ট ডাউনলোড ফাইল লিংক সহ।
             </p>
           </div>
         )}

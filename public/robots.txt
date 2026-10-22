@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://your-domain.com/sitemap.xml
+
+# Disallow admin and internal routes
+Disallow: /admin
+Disallow: /login
+
+# Allow all app pages
+Allow: /app/*

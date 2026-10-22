@@ -5,14 +5,11 @@ import {
   LayoutGrid,
   Joystick,
   Search,
-  ShieldCheck,
   Download,
-  Settings,
+  ShieldCheck,
   LogOut,
-  Layers,
 } from 'lucide-react';
 import { useAppStore } from '../context/AppContext.tsx';
-
 import { AppleStoreIcon } from './AppleStoreIcon.tsx';
 
 export const Sidebar: React.FC = () => {
@@ -32,25 +29,24 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="hidden md:flex w-64 flex-col justify-between border-r border-black/[0.06] dark:border-white/[0.08] bg-white/60 dark:bg-[#161618]/70 backdrop-blur-2xl p-5 sticky top-0 h-screen select-none">
+    <aside className="hidden md:flex w-64 flex-col justify-between border-r border-white/10 bg-black/60 backdrop-blur-2xl p-5 sticky top-0 h-screen select-none">
       {/* Brand & Logo */}
       <div className="space-y-6">
         <div className="flex items-center gap-3 px-2">
-          {/* Official Apple App Store Icon */}
           <AppleStoreIcon size={38} />
           <div>
-            <h1 className="text-base font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">
+            <h1 className="text-base font-bold tracking-tight text-[#f5f5f7]">
               App Store
             </h1>
-            <p className="text-[11px] text-black/50 dark:text-white/50 font-medium">
-              Discover &amp; Download
+            <p className="text-[11px] text-white/50 font-medium">
+              Discover & Download
             </p>
           </div>
         </div>
 
         {/* Navigation list */}
         <nav className="space-y-1">
-          <p className="px-3 text-[11px] font-semibold text-black/40 dark:text-white/40 uppercase tracking-wider mb-2">
+          <p className="px-3 text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-2">
             Store
           </p>
           {navItems.map((item) => {
@@ -63,17 +59,17 @@ export const Sidebar: React.FC = () => {
                 className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   isActive
                     ? 'bg-[#0071e3] text-white shadow-sm shadow-blue-500/25'
-                    : 'text-black/80 dark:text-white/80 hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
+                    : 'text-white/80 hover:bg-white/10'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-black/60 dark:text-white/60'}`} />
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-white/60'}`} />
                   <span>{item.label}</span>
                 </div>
                 {item.badge && (
                   <span
                     className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
-                      isActive ? 'bg-white/20 text-white' : 'bg-[#e53935] text-white'
+                      isActive ? 'bg-white/20 text-white' : 'bg-red-500 text-white'
                     }`}
                   >
                     {item.badge}
@@ -85,15 +81,15 @@ export const Sidebar: React.FC = () => {
         </nav>
 
         {/* Installed Apps count */}
-        <div className="px-3.5 py-3 rounded-xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.04] dark:border-white/[0.05]">
-          <div className="flex items-center justify-between text-xs text-black/60 dark:text-white/60 mb-1">
+        <div className="px-3.5 py-3 rounded-xl bg-white/5 border border-white/10">
+          <div className="flex items-center justify-between text-xs text-white/60 mb-1">
             <span className="flex items-center gap-1.5 font-medium">
               <Download className="w-3.5 h-3.5 text-[#0071e3]" />
               Installed Apps
             </span>
-            <span className="font-semibold text-black dark:text-white">{installedAppIds.length}</span>
+            <span className="font-semibold text-white">{installedAppIds.length}</span>
           </div>
-          <p className="text-[11px] text-black/40 dark:text-white/40">
+          <p className="text-[11px] text-white/40">
             Downloaded to this device
           </p>
         </div>
@@ -107,15 +103,15 @@ export const Sidebar: React.FC = () => {
             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
               currentTab === 'admin'
                 ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-orange-500/20'
-                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/15'
+                : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/15'
             }`}
           >
             <div className="flex items-center gap-2.5">
               <ShieldCheck className="w-4 h-4" />
               <span>Admin Panel</span>
             </div>
-            <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 bg-black/10 dark:bg-white/10 rounded">
-              Superbase
+            <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 bg-white/10 rounded">
+              Developer
             </span>
           </button>
         )}
@@ -132,10 +128,10 @@ export const Sidebar: React.FC = () => {
                 )}
               </div>
               <div className="truncate">
-                <p className="text-xs font-medium text-[#1d1d1f] dark:text-[#f5f5f7] truncate">
+                <p className="text-xs font-medium text-[#f5f5f7] truncate">
                   {user.name}
                 </p>
-                <p className="text-[10px] text-black/40 dark:text-white/40 truncate">
+                <p className="text-[10px] text-white/40 truncate">
                   {user.email}
                 </p>
               </div>
@@ -144,7 +140,7 @@ export const Sidebar: React.FC = () => {
               onClick={logoutUser}
               title="Sign Out"
               aria-label="Sign Out"
-              className="p-1.5 rounded-lg text-black/40 dark:text-white/40 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+              className="p-1.5 rounded-lg text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-colors"
             >
               <LogOut className="w-3.5 h-3.5" />
             </button>

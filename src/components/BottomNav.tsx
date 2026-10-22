@@ -14,7 +14,7 @@ export const BottomNav: React.FC = () => {
   ] as const;
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#f5f5f7]/85 dark:bg-[#161618]/85 backdrop-blur-2xl border-t border-black/[0.08] dark:border-white/[0.08] px-2 py-1.5 flex items-center justify-around safe-area-pb">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-black/80 dark:bg-black/80 backdrop-blur-2xl border-t border-white/10 dark:border-white/10 px-2 py-1.5 flex items-center justify-around safe-area-pb">
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = currentTab === item.id;
@@ -23,7 +23,7 @@ export const BottomNav: React.FC = () => {
             key={item.id}
             onClick={() => setCurrentTab(item.id)}
             className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition-colors ${
-              isActive ? 'text-[#0071e3]' : 'text-black/50 dark:text-white/50 hover:text-black dark:hover:text-white'
+              isActive ? 'text-[#0071e3]' : 'text-white/50 dark:text-white/50 hover:text-white dark:hover:text-white'
             }`}
           >
             <Icon className="w-5 h-5 mb-0.5" />
@@ -36,7 +36,7 @@ export const BottomNav: React.FC = () => {
         <button
           onClick={() => setCurrentTab('admin')}
           className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition-colors ${
-            currentTab === 'admin' ? 'text-amber-500 font-bold' : 'text-black/50 dark:text-white/50'
+            currentTab === 'admin' ? 'text-amber-500 font-bold' : 'text-white/50 dark:text-white/50'
           }`}
         >
           <ShieldCheck className="w-5 h-5 mb-0.5 text-amber-500" />

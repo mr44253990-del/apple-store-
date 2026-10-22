@@ -142,7 +142,7 @@ export const AppsTab: React.FC = () => {
             No Applications Published Yet
           </h3>
           <p className="text-xs text-black/50 dark:text-white/50 max-w-sm mx-auto">
-            Add productivity, photography, and utility apps in App Store Connect Admin.
+            অ্যাডমিন প্যানেল থেকে প্রোডাক্টিভিটি, ফটো ও ইউটিলিটি অ্যাপ যোগ করুন।
           </p>
         </div>
       )}

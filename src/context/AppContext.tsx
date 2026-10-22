@@ -1,13 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { AppItem, ReviewItem, UserProfile, AppSettings } from '../types.ts';
 import { INITIAL_APPS, INITIAL_REVIEWS } from '../data/seedApps.ts';
-import {
-  getSupabase,
-  signOutFromSupabase,
-  incrementAppDownloadInSupabase,
-  updateUserProfileMetadata,
-} from '../lib/supabase.ts';
-import confetti from 'canvas-confetti';
 
 interface AppContextType {
   apps: AppItem[];
@@ -24,7 +17,7 @@ interface AppContextType {
   installedAppIds: string[];
   isLoadingCloud: boolean;
   cloudSyncStatus: 'synced' | 'local' | 'error';
-  supabaseErrorNotice: string | null;
+  cloudErrorNotice: string | null;
   // Handlers
   setSelectedApp: (app: AppItem | null) => void;
   setCurrentTab: (tab: 'today' | 'games' | 'apps' | 'arcade' | 'search' | 'admin') => void;
@@ -40,18 +33,23 @@ interface AppContextType {
   addReview: (reviewData: { appId: string; author: string; rating: number; title: string; comment: string }) => Promise<void>;
   triggerDownload: (app: AppItem) => void;
   updateSettings: (newSettings: Partial<AppSettings>) => void;
-  refreshFromSupabase: () => Promise<void>;
+  refreshFromCloud: () => Promise<void>;
   clearAllDemoData: () => void;
+  // Application Link Generator
+  generateAppLink: (app: AppItem) => string;
+  copyAppLink: (app: AppItem) => void;
+  // SEO Helpers
+  updatePageSEO: (app?: AppItem) => void;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   google_search_console_token: '',
   auto_google_index: true,
-  site_title: 'App Store - Discover & Download Apps',
-  site_description: 'Discover great apps, games, and stories on the Apple App Store.',
-  accent_color: 'blue',
+  site_title: 'App Store - Discover & Download Real Apps',
+  site_description: 'Discover, download, and manage real applications. Publish your own apps with direct file links. Dark & Light theme support.',
   theme_mode: 'dark',
   custom_download_message: 'Your download has begun. Enjoy your application!',
+  auto_black_skin: true,
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -59,7 +57,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 // Helper to get local custom published apps safely
 function getLocalPublishedApps(): AppItem[] {
   try {
-    const saved = localStorage.getItem('appstore_published_apps_v2');
+    const saved = localStorage.getItem('appstore_published_apps_v3');
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) return parsed;
@@ -70,35 +68,26 @@ function getLocalPublishedApps(): AppItem[] {
   return [];
 }
 
-// Resilient remote Supabase insertion helper that falls back gracefully if remote schema is missing newly added columns
-async function resilientInsertApp(client: any, app: AppItem): Promise<{ ok: boolean; error?: any }> {
-  try {
-    const { error } = await client.from('apps').insert([app]);
-    if (!error) return { ok: true };
+const BASE_ORIGIN = typeof window !== 'undefined' ? window.location.origin : '';
 
-    const errMsg = (error.message || '').toLowerCase();
-    if (errMsg.includes('column') || errMsg.includes('schema') || errMsg.includes('does not exist')) {
-      // Retry without newer columns in case user hasn't run the latest migration SQL yet
-      const { video_url, compatibility, languages, downloads_count, release_notes, ...fallbackApp } = app as any;
-      const retry = await client.from('apps').insert([fallbackApp]);
-      if (!retry.error) return { ok: true };
-      return { ok: false, error: retry.error };
-    }
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
-    return { ok: false, error };
-  } catch (err) {
-    return { ok: false, error: err };
-  }
+function generateAppCanonicalUrl(app: AppItem): string {
+  const slug = app.slug || generateSlug(app.name);
+  return `${BASE_ORIGIN}/app/${slug}`;
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load initial apps from persistent local published apps storage first
   const [apps, setApps] = useState<AppItem[]>(() => {
     const published = getLocalPublishedApps();
-    if (published.length > 0) {
-      return published;
-    }
-    const saved = localStorage.getItem('appstore_apps_data_v2');
+    if (published.length > 0) return published;
+    const saved = localStorage.getItem('appstore_apps_data_v3');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -111,7 +100,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [reviews, setReviews] = useState<Record<string, ReviewItem[]>>(() => {
-    const saved = localStorage.getItem('appstore_reviews_data_v2');
+    const saved = localStorage.getItem('appstore_reviews_data_v3');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -123,7 +112,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [settings, setSettings] = useState<AppSettings>(() => {
-    const saved = localStorage.getItem('appstore_settings_data');
+    const saved = localStorage.getItem('appstore_settings_data_v3');
     if (saved) {
       try {
         return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
@@ -135,7 +124,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [user, setUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('appstore_user_data');
+    const saved = localStorage.getItem('appstore_user_data_v3');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -147,7 +136,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [installedAppIds, setInstalledAppIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem('appstore_installed_apps');
+    const saved = localStorage.getItem('appstore_installed_apps_v3');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -160,153 +149,174 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'local' | 'error'>('local');
-  const [supabaseErrorNotice, setSupabaseErrorNotice] = useState<string | null>(null);
+  const [cloudErrorNotice, setCloudErrorNotice] = useState<string | null>(null);
 
-  // Persistence to local storage
+  // Persistence: apps
   useEffect(() => {
-    localStorage.setItem('appstore_apps_data_v2', JSON.stringify(apps));
+    localStorage.setItem('appstore_apps_data_v3', JSON.stringify(apps));
+    const published = getLocalPublishedApps();
+    const merged = [...new Map([...published, ...apps].map(a => [a.id, a])).values()];
+    localStorage.setItem('appstore_published_apps_v3', JSON.stringify(merged));
   }, [apps]);
 
+  // Persistence: reviews
   useEffect(() => {
-    localStorage.setItem('appstore_reviews_data_v2', JSON.stringify(reviews));
+    localStorage.setItem('appstore_reviews_data_v3', JSON.stringify(reviews));
   }, [reviews]);
 
+  // Persistence: settings + theme + SEO meta
   useEffect(() => {
-    localStorage.setItem('appstore_settings_data', JSON.stringify(settings));
+    localStorage.setItem('appstore_settings_data_v3', JSON.stringify(settings));
+
+    // Apply theme class
     if (settings.theme_mode === 'dark' || (settings.theme_mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
 
-    if (settings.google_search_console_token) {
-      let meta = document.querySelector('meta[name="google-site-verification"]');
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.setAttribute('name', 'google-site-verification');
-        document.head.appendChild(meta);
-      }
+    // Inject Google Search Console verification meta tag
+    const meta = document.getElementById('gsc-verification') as HTMLMetaElement | null;
+    if (meta && settings.google_search_console_token) {
       meta.setAttribute('content', settings.google_search_console_token);
     }
-  }, [settings]);
 
+    // Update page SEO based on current context
+    updatePageSEOImpl();
+  }, [settings, apps, selectedApp]);
+
+  // Persistence: user
   useEffect(() => {
     if (user) {
-      localStorage.setItem('appstore_user_data', JSON.stringify(user));
+      localStorage.setItem('appstore_user_data_v3', JSON.stringify(user));
     } else {
-      localStorage.removeItem('appstore_user_data');
+      localStorage.removeItem('appstore_user_data_v3');
     }
   }, [user]);
 
+  // Persistence: installed apps
   useEffect(() => {
-    localStorage.setItem('appstore_installed_apps', JSON.stringify(installedAppIds));
+    localStorage.setItem('appstore_installed_apps_v3', JSON.stringify(installedAppIds));
   }, [installedAppIds]);
 
-  // Real Supabase Auth Listener
-  useEffect(() => {
-    const client = getSupabase();
-    // Check active session
-    client.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        const email = session.user.email?.toLowerCase() || '';
-        const isAdmin = email === 'mr4425390@gmail.com';
-        setUser({
-          id: session.user.id,
-          email,
-          name: session.user.user_metadata?.full_name || (isAdmin ? 'Admin Developer' : email.split('@')[0]),
-          is_admin: isAdmin,
-          avatar_url: session.user.user_metadata?.avatar_url || (isAdmin ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' : undefined),
-        });
-      }
-    }).catch(err => {
-      console.warn('Supabase getSession notice:', err);
-    });
+  const updatePageSEOImpl = (app?: AppItem) => {
+    if (!settings.auto_google_index) return;
 
-    const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        const email = session.user.email?.toLowerCase() || '';
-        const isAdmin = email === 'mr4425390@gmail.com';
-        setUser({
-          id: session.user.id,
-          email,
-          name: session.user.user_metadata?.full_name || (isAdmin ? 'Admin Developer' : email.split('@')[0]),
-          is_admin: isAdmin,
-          avatar_url: session.user.user_metadata?.avatar_url || (isAdmin ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' : undefined),
-        });
-      } else {
-        const stored = localStorage.getItem('appstore_user_data');
-        if (!stored) {
-          setUser(null);
-        }
-      }
-    });
+    const titleEl = document.getElementById('page-title') as HTMLTitleElement | null;
+    const descEl = document.getElementById('page-meta-desc') as HTMLMetaElement | null;
+    const ogTitleEl = document.getElementById('og-title') as HTMLMetaElement | null;
+    const ogDescEl = document.getElementById('og-desc') as HTMLMetaElement | null;
+    const ogUrlEl = document.getElementById('og-url') as HTMLMetaElement | null;
+    const ogImageEl = document.getElementById('og-image') as HTMLMetaElement | null;
+    const twitterTitleEl = document.getElementById('twitter-title') as HTMLMetaElement | null;
+    const twitterDescEl = document.getElementById('twitter-desc') as HTMLMetaElement | null;
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+    if (app) {
+      const canonicalUrl = generateAppCanonicalUrl(app);
+      const seoTitle = app.seo_title || `${app.name} - Download ${app.version} | App Store`;
+      const seoDesc = app.seo_description || app.subtitle || `${app.name} by ${app.developer}. ${app.description.slice(0, 160)}`;
+      const imageUrl = app.icon_url || '';
 
-  // Resilient Supabase Apps Fetch & Merge on mount
-  const refreshFromSupabase = async () => {
-    try {
-      setIsLoadingCloud(true);
-      const client = getSupabase();
-      const { data, error } = await client.from('apps').select('*').order('created_at', { ascending: false });
-      
-      const localPublished = getLocalPublishedApps();
+      if (titleEl) titleEl.text = seoTitle;
+      if (descEl) descEl.setAttribute('content', seoDesc);
+      if (ogTitleEl) ogTitleEl.setAttribute('content', seoTitle);
+      if (ogDescEl) ogDescEl.setAttribute('content', seoDesc);
+      if (ogUrlEl) ogUrlEl.setAttribute('content', canonicalUrl);
+      if (ogImageEl) ogImageEl.setAttribute('content', imageUrl);
+      if (twitterTitleEl) twitterTitleEl.setAttribute('content', seoTitle);
+      if (twitterDescEl) twitterDescEl.setAttribute('content', seoDesc);
 
-      if (!error && data && Array.isArray(data)) {
-        // Build deduplicated merge map: Supabase remote data + locally published data
-        const mergedMap = new Map<string, AppItem>();
-        // Add remote apps
-        data.forEach((app: any) => {
-          mergedMap.set(app.id, app as AppItem);
-        });
-        // Preserve local published apps that might not have reached Supabase yet
-        localPublished.forEach((app: AppItem) => {
-          if (!mergedMap.has(app.id)) {
-            mergedMap.set(app.id, app);
-            // Attempt to background insert into remote Supabase with automatic schema fallback
-            resilientInsertApp(client, app).then(({ ok, error: syncErr }) => {
-              if (!ok && syncErr) {
-                console.warn('Background sync of local app to Supabase notice:', syncErr?.message || syncErr);
-              }
-            });
-          }
-        });
+      // Inject JSON-LD SoftwareApplication schema
+      injectJsonLd(app, canonicalUrl);
+    } else {
+      if (titleEl) titleEl.text = settings.site_title;
+      if (descEl) descEl.setAttribute('content', settings.site_description);
+      if (ogTitleEl) ogTitleEl.setAttribute('content', settings.site_title);
+      if (ogDescEl) ogDescEl.setAttribute('content', settings.site_description);
+      if (ogUrlEl) ogUrlEl.setAttribute('content', BASE_ORIGIN);
+      if (ogImageEl) ogImageEl.setAttribute('content', '');
+      if (twitterTitleEl) twitterTitleEl.setAttribute('content', settings.site_title);
+      if (twitterDescEl) twitterDescEl.setAttribute('content', settings.site_description);
 
-        const finalMerged = Array.from(mergedMap.values()).sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-        setApps(finalMerged);
-        setCloudSyncStatus('synced');
-        setSupabaseErrorNotice(null);
-      } else {
-        // If Supabase query failed or table doesn't exist yet, NEVER wipe out published apps!
-        console.warn('Supabase fetch returned error or empty, keeping local apps:', error?.message);
-        if (localPublished.length > 0) {
-          setApps(localPublished);
-        }
-        setCloudSyncStatus('local');
-        if (error) {
-          setSupabaseErrorNotice(error.message);
-        }
-      }
-    } catch (err: any) {
-      console.warn('Supabase fetch exception, keeping active state:', err);
-      const localPublished = getLocalPublishedApps();
-      if (localPublished.length > 0) {
-        setApps(localPublished);
-      }
-      setCloudSyncStatus('local');
-    } finally {
-      setIsLoadingCloud(false);
+      // Remove per-app JSON-LD, keep site-level ItemList
+      injectSiteJsonLd();
     }
   };
 
-  useEffect(() => {
-    refreshFromSupabase();
-  }, []);
+  const injectJsonLd = (app: AppItem, canonicalUrl: string) => {
+    let script = document.getElementById('app-json-ld') as HTMLScriptElement | null;
+    if (!script) {
+      script = document.createElement('script');
+      script.id = 'app-json-ld';
+      script.type = 'application/ld+json';
+      document.head.appendChild(script);
+    }
+    const schema = {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: app.seo_title || app.name,
+      applicationCategory: app.category,
+      operatingSystem: 'iOS, iPadOS, macOS, Android',
+      applicationSuite: 'App Store',
+      author: {
+        '@type': 'Person',
+        name: app.developer,
+      },
+      aggregateRating: {
+        '@type': 'AggregateRating',
+        ratingValue: app.rating,
+        ratingCount: app.rating_count,
+      },
+      offers: {
+        '@type': 'Offer',
+        price: app.price || 0,
+        priceCurrency: 'USD',
+      },
+      downloadUrl: app.download_url,
+      url: canonicalUrl,
+      image: app.icon_url,
+      screenshot: app.screenshots,
+      description: app.seo_description || app.description,
+      version: app.version,
+      fileSize: app.file_size,
+      ageRange: app.age_rating,
+    };
+    script.text = JSON.stringify(schema);
+  };
+
+  const injectSiteJsonLd = () => {
+    let script = document.getElementById('site-json-ld') as HTMLScriptElement | null;
+    // Remove old per-app schema if present
+    const oldApp = document.getElementById('app-json-ld');
+    if (oldApp) oldApp.remove();
+
+    if (!script) {
+      script = document.createElement('script');
+      script.id = 'site-json-ld';
+      script.type = 'application/ld+json';
+      document.head.appendChild(script);
+    }
+    const schema = {
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: settings.site_title,
+      description: settings.site_description,
+      url: BASE_ORIGIN,
+      itemListElement: apps.slice(0, 50).map((app, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        item: {
+          '@type': 'SoftwareApplication',
+          name: app.name,
+          applicationCategory: app.category,
+          downloadUrl: app.download_url,
+          url: generateAppCanonicalUrl(app),
+          image: app.icon_url,
+        },
+      })),
+    };
+    script.text = JSON.stringify(schema);
+  };
 
   const setUserDirectly = (newUser: UserProfile | null) => {
     setUser(newUser);
@@ -319,18 +329,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!user) return;
     const updated = { ...user, avatar_url: avatarUrl };
     setUser(updated);
-    localStorage.setItem('appstore_user_data', JSON.stringify(updated));
-    await updateUserProfileMetadata({ avatar_url: avatarUrl });
+    localStorage.setItem('appstore_user_data_v3', JSON.stringify(updated));
   };
 
   const logoutUser = async () => {
-    try {
-      await signOutFromSupabase();
-    } catch (e) {
-      // ignore
-    }
     setUser(null);
-    localStorage.removeItem('appstore_user_data');
+    localStorage.removeItem('appstore_user_data_v3');
     if (currentTab === 'admin') {
       setCurrentTab('today');
     }
@@ -339,65 +343,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const clearAllDemoData = () => {
     setApps([]);
     setReviews({});
-    localStorage.removeItem('appstore_apps_data');
+    localStorage.removeItem('appstore_apps_data_v3');
     localStorage.removeItem('appstore_apps_data_v2');
+    localStorage.removeItem('appstore_published_apps_v3');
     localStorage.removeItem('appstore_published_apps_v2');
-    localStorage.removeItem('appstore_reviews_data');
+    localStorage.removeItem('appstore_reviews_data_v3');
     localStorage.removeItem('appstore_reviews_data_v2');
   };
 
   const addApp = async (appData: Omit<AppItem, 'id' | 'created_at' | 'downloads_count'>): Promise<AppItem> => {
+    const slug = appData.slug || generateSlug(appData.name);
+    const canonicalUrl = appData.canonical_url || `${BASE_ORIGIN}/app/${slug}`;
+
     const newApp: AppItem = {
       ...appData,
+      slug,
+      canonical_url: canonicalUrl,
       id: `app_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       downloads_count: 0,
       created_at: new Date().toISOString(),
     };
 
-    // 1. Immediately save to local published apps list to guarantee zero loss on reload
+    // Save to local published apps list
     const currentLocal = getLocalPublishedApps();
     const updatedLocal = [newApp, ...currentLocal.filter(a => a.id !== newApp.id)];
-    localStorage.setItem('appstore_published_apps_v2', JSON.stringify(updatedLocal));
+    localStorage.setItem('appstore_published_apps_v3', JSON.stringify(updatedLocal));
 
-    // 2. Update reactive state
+    // Update reactive state
     setApps((prev) => [newApp, ...prev.filter(a => a.id !== newApp.id)]);
-
-    // 3. Save to Supabase remote database with resilient schema fallback
-    try {
-      const client = getSupabase();
-      const { ok, error } = await resilientInsertApp(client, newApp);
-      if (!ok && error) {
-        console.warn('Supabase remote insert notice:', error);
-        setSupabaseErrorNotice(`Saved to browser store! Remote Supabase notice: ${error.message || 'Check connection'}. Run SQL Schema from Admin tab if table is not yet created.`);
-      } else {
-        setCloudSyncStatus('synced');
-        setSupabaseErrorNotice(null);
-      }
-    } catch (err: any) {
-      console.warn('Supabase cloud insert exception, safely queued locally:', err);
-      setSupabaseErrorNotice(`Saved locally! Supabase error: ${err?.message || 'Network error'}`);
-    }
 
     return newApp;
   };
 
   const updateApp = async (updatedApp: AppItem) => {
-    setApps((prev) => prev.map((app) => (app.id === updatedApp.id ? updatedApp : app)));
-    if (selectedApp && selectedApp.id === updatedApp.id) {
-      setSelectedApp(updatedApp);
+    // Ensure slug & canonical url are kept in sync
+    const appToSave: AppItem = {
+      ...updatedApp,
+      slug: updatedApp.slug || generateSlug(updatedApp.name),
+      canonical_url: updatedApp.canonical_url || `${BASE_ORIGIN}/app/${updatedApp.slug || generateSlug(updatedApp.name)}`,
+    };
+
+    setApps((prev) => prev.map((app) => (app.id === appToSave.id ? appToSave : app)));
+    if (selectedApp && selectedApp.id === appToSave.id) {
+      setSelectedApp(appToSave);
     }
 
-    // Update in local published apps
     const currentLocal = getLocalPublishedApps();
-    const updatedLocal = currentLocal.map((a) => (a.id === updatedApp.id ? updatedApp : a));
-    localStorage.setItem('appstore_published_apps_v2', JSON.stringify(updatedLocal));
-
-    try {
-      const client = getSupabase();
-      await client.from('apps').update(updatedApp).eq('id', updatedApp.id);
-    } catch (err) {
-      console.warn('Supabase cloud update queued locally:', err);
-    }
+    const updatedLocal = currentLocal.map((a) => (a.id === appToSave.id ? appToSave : a));
+    localStorage.setItem('appstore_published_apps_v3', JSON.stringify(updatedLocal));
   };
 
   const deleteApp = async (id: string) => {
@@ -406,17 +399,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSelectedApp(null);
     }
 
-    // Remove from local published apps
     const currentLocal = getLocalPublishedApps();
     const updatedLocal = currentLocal.filter((a) => a.id !== id);
-    localStorage.setItem('appstore_published_apps_v2', JSON.stringify(updatedLocal));
-
-    try {
-      const client = getSupabase();
-      await client.from('apps').delete().eq('id', id);
-    } catch (err) {
-      console.warn('Supabase cloud delete queued locally:', err);
-    }
+    localStorage.setItem('appstore_published_apps_v3', JSON.stringify(updatedLocal));
   };
 
   const addReview = async (reviewData: { appId: string; author: string; rating: number; title: string; comment: string }) => {
@@ -451,13 +436,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return app;
       })
     );
-
-    try {
-      const client = getSupabase();
-      await client.from('reviews').insert([newRev]);
-    } catch (err) {
-      console.warn('Supabase review insert queued locally:', err);
-    }
   };
 
   const triggerDownload = (app: AppItem) => {
@@ -476,32 +454,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setInstalledAppIds((prev) => (prev.includes(app.id) ? prev : [...prev, app.id]));
 
         const newDownloadsCount = (app.downloads_count || 0) + 1;
-
-        // Update in state
         setApps((prev) =>
           prev.map((a) => (a.id === app.id ? { ...a, downloads_count: newDownloadsCount } : a))
         );
 
-        // Update in local published apps
         const currentLocal = getLocalPublishedApps();
         const updatedLocal = currentLocal.map((a) =>
           a.id === app.id ? { ...a, downloads_count: newDownloadsCount } : a
         );
-        localStorage.setItem('appstore_published_apps_v2', JSON.stringify(updatedLocal));
-
-        // Sync download count to Supabase
-        incrementAppDownloadInSupabase(app.id, newDownloadsCount);
-
-        try {
-          confetti({
-            particleCount: 70,
-            spread: 60,
-            origin: { y: 0.7 },
-            colors: ['#0071e3', '#30b0c7', '#34c759', '#ff9500', '#af52de'],
-          });
-        } catch (e) {
-          // ignore
-        }
+        localStorage.setItem('appstore_published_apps_v3', JSON.stringify(updatedLocal));
 
         try {
           const link = document.createElement('a');
@@ -530,6 +491,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSettings((prev) => ({ ...prev, ...newSettings }));
   };
 
+  const refreshFromCloud = async () => {
+    // Cloud/Supabase removed as requested; data stays in localStorage
+    setCloudSyncStatus('local');
+    setCloudErrorNotice(null);
+  };
+
+  // Application Link Generator
+  const generateAppLink = (app: AppItem): string => {
+    return generateAppCanonicalUrl(app);
+  };
+
+  const copyAppLink = (app: AppItem) => {
+    const link = generateAppCanonicalUrl(app);
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(link);
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -547,7 +526,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         installedAppIds,
         isLoadingCloud,
         cloudSyncStatus,
-        supabaseErrorNotice,
+        cloudErrorNotice,
         setSelectedApp,
         setCurrentTab,
         setSearchQuery,
@@ -562,8 +541,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addReview,
         triggerDownload,
         updateSettings,
-        refreshFromSupabase,
+        refreshFromCloud,
         clearAllDemoData,
+        generateAppLink,
+        copyAppLink,
+        updatePageSEO: updatePageSEOImpl,
       }}
     >
       {children}

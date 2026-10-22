@@ -218,7 +218,7 @@ export const SearchTab: React.FC = () => {
               No Applications Found
             </h3>
             <p className="text-xs text-black/50 dark:text-white/50 max-w-sm mx-auto">
-              We couldn&apos;t find any app matching &ldquo;{searchQuery || selectedTag}&rdquo;. Try another keyword or explore categories below.
+              আমরা আপনার কিওয়ার্ড "{"{searchQuery || selectedTag}"} সাথে যেসব অ্যাপ পাইনি। অন্য কিওয়ার্ড চেষ্টা করুন বা নিচের ক্যাটাগরি এক্সপ্লোর করুন।
             </p>
           </div>
         )}

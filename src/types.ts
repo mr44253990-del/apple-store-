@@ -37,6 +37,11 @@ export interface AppItem {
   created_at: string;
   compatibility?: string;
   languages?: string[];
+  // SEO & Sharing
+  slug?: string; // SEO-friendly URL slug e.g. "my-cool-app"
+  canonical_url?: string; // Full shareable link for this app
+  seo_title?: string; // Custom SEO title for this app page
+  seo_description?: string; // Custom meta description for Google
 }
 
 export interface UserProfile {
@@ -53,7 +58,8 @@ export interface AppSettings {
   auto_google_index: boolean;
   site_title: string;
   site_description: string;
-  accent_color: 'blue' | 'purple' | 'emerald' | 'orange' | 'rose' | 'slate';
   theme_mode: 'dark' | 'light' | 'system';
   custom_download_message?: string;
+  // Auto black skin fix for admin uploads
+  auto_black_skin?: boolean;
 }
