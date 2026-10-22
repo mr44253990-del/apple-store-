@@ -23,6 +23,11 @@ import {
   Sliders,
   CheckCircle2,
   AlertTriangle,
+  Video,
+  Film,
+  Image as ImageIcon,
+  Play,
+  Plus,
 } from 'lucide-react';
 
 export const AdminPanel: React.FC = () => {
@@ -37,6 +42,7 @@ export const AdminPanel: React.FC = () => {
     setSelectedApp,
     refreshFromSupabase,
     clearAllDemoData,
+    supabaseErrorNotice,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<'add' | 'manage' | 'seo' | 'supabase' | 'readme'>('add');
@@ -58,6 +64,7 @@ export const AdminPanel: React.FC = () => {
       'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=1080&auto=format&fit=crop&q=80',
       'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=1080&auto=format&fit=crop&q=80',
     ],
+    video_url: '',
     description: '',
     whats_new: 'Initial launch with full iOS 18 performance optimizations.',
     tagsText: '#appstore, #ios, #productivity, #trending',
@@ -69,16 +76,45 @@ export const AdminPanel: React.FC = () => {
     fakeReviewsCount: 3,
   });
 
+  const [screenshotInput, setScreenshotInput] = useState('');
   const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const [isUploadingScreenshots, setIsUploadingScreenshots] = useState(false);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [uploadSuccessMessage, setUploadSuccessMessage] = useState('');
+  const [screenshotUploadMessage, setScreenshotUploadMessage] = useState('');
+  const [videoUploadMessage, setVideoUploadMessage] = useState('');
   const [formSuccessMessage, setFormSuccessMessage] = useState('');
   const [copiedSQL, setCopiedSQL] = useState(false);
+  const [copiedOrigin, setCopiedOrigin] = useState(false);
   const [supabaseTestStatus, setSupabaseTestStatus] = useState<{
     tested: boolean;
     success: boolean;
     message: string;
   } | null>(null);
   const [isTestingSupabase, setIsTestingSupabase] = useState(false);
+
+  // Helper to format YouTube or Vimeo URLs into responsive embeds
+  const formatEmbedVideoUrl = (rawUrl: string): string => {
+    if (!rawUrl) return '';
+    const trimmed = rawUrl.trim();
+    if (trimmed.includes('youtube.com/watch')) {
+      const vid = trimmed.split('v=')[1]?.split('&')[0];
+      if (vid) return `https://www.youtube.com/embed/${vid}`;
+    }
+    if (trimmed.includes('youtu.be/')) {
+      const vid = trimmed.split('youtu.be/')[1]?.split('?')[0];
+      if (vid) return `https://www.youtube.com/embed/${vid}`;
+    }
+    if (trimmed.includes('youtube.com/shorts/')) {
+      const vid = trimmed.split('youtube.com/shorts/')[1]?.split('?')[0];
+      if (vid) return `https://www.youtube.com/embed/${vid}`;
+    }
+    if (trimmed.includes('vimeo.com/')) {
+      const vid = trimmed.split('vimeo.com/')[1]?.split('?')[0];
+      if (vid && !isNaN(Number(vid))) return `https://player.vimeo.com/video/${vid}`;
+    }
+    return trimmed;
+  };
 
   // Auto # tags generator
   const handleGenerateTags = () => {
@@ -129,6 +165,65 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  // Multiple screenshot upload handler
+  const handleScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploadingScreenshots(true);
+    try {
+      const uploaded: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const url = await uploadAppFile(files[i], 'app-assets');
+        uploaded.push(url);
+      }
+      setFormData((prev) => ({
+        ...prev,
+        screenshots: [...prev.screenshots, ...uploaded],
+      }));
+      setScreenshotUploadMessage(`Added ${files.length} screenshot image(s)!`);
+      setTimeout(() => setScreenshotUploadMessage(''), 3000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsUploadingScreenshots(false);
+    }
+  };
+
+  const handleAddScreenshotUrl = () => {
+    if (!screenshotInput.trim()) return;
+    setFormData((prev) => ({
+      ...prev,
+      screenshots: [...prev.screenshots, screenshotInput.trim()],
+    }));
+    setScreenshotInput('');
+  };
+
+  const handleRemoveScreenshot = (indexToRemove: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      screenshots: prev.screenshots.filter((_, idx) => idx !== indexToRemove),
+    }));
+  };
+
+  // Video trailer upload handler
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingVideo(true);
+    try {
+      const url = await uploadAppFile(file, 'app-assets');
+      setFormData((prev) => ({ ...prev, video_url: url }));
+      setVideoUploadMessage(`Video "${file.name}" uploaded successfully!`);
+      setTimeout(() => setVideoUploadMessage(''), 3000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
   // Submit App creation
   const handleCreateApp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,6 +254,7 @@ export const AdminPanel: React.FC = () => {
       price: Number(formData.price) || 0,
       age_rating: formData.age_rating,
       screenshots: formData.screenshots,
+      video_url: formData.video_url.trim() ? formatEmbedVideoUrl(formData.video_url.trim()) : undefined,
       tags: tagsArray,
       whats_new: formData.whats_new,
       in_app_purchases: formData.in_app_purchases,
@@ -177,8 +273,8 @@ export const AdminPanel: React.FC = () => {
       localStorage.setItem('appstore_reviews_data', JSON.stringify(existingReviews));
     }
 
-    setFormSuccessMessage(`Application "${formData.name}" published successfully!`);
-    setTimeout(() => setFormSuccessMessage(''), 4000);
+    setFormSuccessMessage(`Application "${formData.name}" published successfully! Saved securely.`);
+    setTimeout(() => setFormSuccessMessage(''), 5000);
 
     // Reset Form
     setFormData({
@@ -197,6 +293,7 @@ export const AdminPanel: React.FC = () => {
         'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=1080&auto=format&fit=crop&q=80',
         'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=1080&auto=format&fit=crop&q=80',
       ],
+      video_url: '',
       description: '',
       whats_new: 'Initial launch with full iOS 18 performance optimizations.',
       tagsText: '#appstore, #ios, #productivity, #trending',
@@ -654,6 +751,214 @@ export const AdminPanel: React.FC = () => {
             </div>
           </div>
 
+          {/* 4. MEDIA STUDIO: SCREENSHOTS & VIDEO TRAILER */}
+          <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-[#1c1c1e] border border-black/5 dark:border-white/10 shadow-sm space-y-6">
+            <div className="space-y-1">
+              <h2 className="text-lg font-bold text-[#1d1d1f] dark:text-[#f5f5f7] flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-[#0071e3]" />
+                <span>4. Media Studio: Multiple Screenshots &amp; Video Trailer</span>
+              </h2>
+              <p className="text-xs text-black/50 dark:text-white/50">
+                Add several example screenshot images and an automatic video trailer for high-converting store presentation.
+              </p>
+            </div>
+
+            {/* SCREENSHOTS MANAGER */}
+            <div className="space-y-4 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/5 dark:border-white/10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
+                    App Screenshots ({formData.screenshots.length} added)
+                  </h3>
+                  <p className="text-xs text-black/50 dark:text-white/50">
+                    Upload multiple images or paste URLs. These display in the preview gallery.
+                  </p>
+                </div>
+                <label className="cursor-pointer px-4 py-2 rounded-xl bg-[#0071e3] text-white text-xs font-semibold hover:bg-[#0077ed] transition-colors inline-flex items-center gap-1.5 self-start sm:self-auto">
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span>{isUploadingScreenshots ? 'Uploading...' : 'Upload Multiple Images'}</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleScreenshotUpload}
+                    disabled={isUploadingScreenshots}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {screenshotUploadMessage && (
+                <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  {screenshotUploadMessage}
+                </div>
+              )}
+
+              {/* Add by URL input */}
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  placeholder="Or paste screenshot image URL (https://...)"
+                  value={screenshotInput}
+                  onChange={(e) => setScreenshotInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddScreenshotUrl();
+                    }
+                  }}
+                  className="flex-1 px-4 py-2 text-xs rounded-xl bg-white dark:bg-[#2c2c2e] border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] outline-none focus:border-[#0071e3]"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddScreenshotUrl}
+                  className="px-4 py-2 rounded-xl bg-black/[0.05] dark:bg-white/[0.08] hover:bg-[#0071e3] hover:text-white text-xs font-semibold transition-colors flex items-center gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add URL</span>
+                </button>
+              </div>
+
+              {/* Screenshots Preview Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 pt-2">
+                {formData.screenshots.map((src, index) => (
+                  <div
+                    key={index}
+                    className="relative group rounded-xl overflow-hidden aspect-[9/16] bg-black/10 border border-black/10 dark:border-white/10 shadow-xs"
+                  >
+                    <img
+                      src={src}
+                      alt={`screenshot ${index + 1}`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src =
+                          'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=1080&auto=format&fit=crop&q=80';
+                      }}
+                    />
+                    <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/60 text-white text-[9px] font-bold">
+                      #{index + 1}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveScreenshot(index)}
+                      className="absolute top-1.5 right-1.5 p-1 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                      title="Remove screenshot"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* VIDEO TRAILER MANAGER */}
+            <div className="space-y-4 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/5 dark:border-white/10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="space-y-0.5">
+                  <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7] flex items-center gap-2">
+                    <Video className="w-4 h-4 text-purple-500" />
+                    <span>App Video Trailer / Demo</span>
+                  </h3>
+                  <p className="text-xs text-black/50 dark:text-white/50">
+                    Paste YouTube, Vimeo, MP4 link or upload video file. Plays automatically in App Detail preview!
+                  </p>
+                </div>
+                <label className="cursor-pointer px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold transition-colors inline-flex items-center gap-1.5 self-start sm:self-auto">
+                  <Film className="w-3.5 h-3.5" />
+                  <span>{isUploadingVideo ? 'Uploading Video...' : 'Upload Video File'}</span>
+                  <input
+                    type="file"
+                    accept="video/mp4,video/webm,video/quicktime"
+                    onChange={handleVideoUpload}
+                    disabled={isUploadingVideo}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {videoUploadMessage && (
+                <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  {videoUploadMessage}
+                </div>
+              )}
+
+              {/* Video URL Input */}
+              <div>
+                <label className="block text-xs font-semibold text-black/60 dark:text-white/60 mb-1">
+                  Video Link (YouTube, Vimeo, or direct MP4/WebM URL)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://www.youtube.com/watch?v=... or https://example.com/video.mp4"
+                    value={formData.video_url}
+                    onChange={(e) => setFormData({ ...formData, video_url: e.target.value })}
+                    className="flex-1 px-4 py-2.5 text-xs rounded-xl bg-white dark:bg-[#2c2c2e] border border-black/10 dark:border-white/10 text-[#1d1d1f] dark:text-[#f5f5f7] outline-none focus:border-[#0071e3]"
+                  />
+                  {formData.video_url && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, video_url: '' })}
+                      className="px-3 py-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 text-xs font-semibold transition-colors"
+                      title="Clear video"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* LIVE VIDEO PREVIEW */}
+              {formData.video_url && (
+                <div className="space-y-2 pt-2">
+                  <span className="text-xs font-semibold text-black/60 dark:text-white/60 flex items-center gap-1.5">
+                    <Play className="w-3.5 h-3.5 text-purple-500" />
+                    <span>Live Video Preview</span>
+                  </span>
+                  <div className="relative rounded-2xl overflow-hidden border border-black/10 dark:border-white/10 bg-black max-w-lg aspect-video shadow-md">
+                    {formatEmbedVideoUrl(formData.video_url).includes('youtube.com/embed') ||
+                    formatEmbedVideoUrl(formData.video_url).includes('player.vimeo.com') ? (
+                      <iframe
+                        src={formatEmbedVideoUrl(formData.video_url)}
+                        title="Video Preview"
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <video
+                        src={formData.video_url}
+                        controls
+                        playsInline
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* SUPABASE STATUS NOTICE */}
+          {supabaseErrorNotice && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-xs space-y-2">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>Notice on Supabase Cloud Sync</span>
+              </div>
+              <p>
+                {supabaseErrorNotice} — However, <strong>your application is permanently saved in your browser storage and will NOT be lost upon refresh</strong>!
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveTab('supabase')}
+                className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-xs transition-colors inline-block"
+              >
+                Go to Supabase Cloud &amp; Run SQL Schema
+              </button>
+            </div>
+          )}
+
           <div className="flex justify-end">
             <button
               type="submit"
@@ -931,6 +1236,47 @@ export const AdminPanel: React.FC = () => {
             <pre className="p-4 rounded-2xl bg-[#0e0e10] text-[#00ff88] text-xs font-mono overflow-x-auto max-h-64 border border-black/10 dark:border-white/10 select-all">
               {getSupabaseSchemaSQL()}
             </pre>
+          </div>
+
+          {/* Email Verification Redirect localhost:3000 Solution */}
+          <div className="p-5 rounded-2xl bg-blue-500/10 border border-blue-500/20 space-y-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-[#0071e3]" />
+              <h3 className="text-sm font-bold text-[#0071e3]">
+                ভেরিফিকেশন ইমেইলে &apos;localhost:3000&apos; আসার কারণ ও ১-ক্লিকে সমাধান
+              </h3>
+            </div>
+            <p className="text-xs text-black/70 dark:text-white/70 leading-relaxed">
+              Supabase প্রজেক্টে ডিফল্ট <strong>Site URL</strong> হিসেবে <code>http://localhost:3000</code> দেওয়া থাকে। তাই সাইন-আপ ভেরিফিকেশন ইমেইলে <code>redirect_to=http://localhost:3000</code> চলে যায়। এটি ঠিক করতে:
+            </p>
+            <ol className="list-decimal list-inside text-xs text-black/70 dark:text-white/70 space-y-1.5 pl-1">
+              <li>
+                Supabase Dashboard এর <a href="https://supabase.com/dashboard/project/zuztlnyzbymywdpwhtee/auth/url-configuration" target="_blank" rel="noreferrer" className="text-[#0071e3] font-semibold underline">Authentication &gt; URL Configuration</a> এ যান।
+              </li>
+              <li>
+                <strong>Site URL</strong> পরিবর্তন করে আপনার বর্তমান লাইভ URL দিন (নিচের বাটন দিয়ে কপি করুন)।
+              </li>
+              <li>
+                অথবা <strong>Authentication &gt; Providers &gt; Email</strong> এ গিয়ে <strong>Confirm email</strong> অপশনটি <strong>OFF</strong> করে দিন, তাহলে ইমেইল ভেরিফিকেশন ছাড়াই সরাসরি লগইন হয়ে যাবে!
+              </li>
+            </ol>
+            <div className="pt-2 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.origin);
+                  setCopiedOrigin(true);
+                  setTimeout(() => setCopiedOrigin(false), 3000);
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-[#0071e3] text-white text-xs font-semibold hover:bg-[#0077ed] transition-colors flex items-center gap-1.5 shadow-xs"
+              >
+                {copiedOrigin ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedOrigin ? 'Current URL Copied!' : 'Copy Current App Origin URL'}</span>
+              </button>
+              <span className="text-[11px] font-mono text-black/50 dark:text-white/50">
+                {typeof window !== 'undefined' ? window.location.origin : ''}
+              </span>
+            </div>
           </div>
         </div>
       )}

@@ -195,7 +195,12 @@ export const SearchTab: React.FC = () => {
                         ★ {app.rating.toFixed(1)}
                       </span>
                       <span>•</span>
-                      <span className="truncate">{app.category}</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                        {app.downloads_count.toLocaleString()} dl
+                      </span>
+                      {app.video_url && (
+                        <span className="text-purple-500 font-bold text-[10px]">VIDEO</span>
+                      )}
                     </div>
                   </div>
                 </div>

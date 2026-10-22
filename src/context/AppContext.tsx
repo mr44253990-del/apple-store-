@@ -1,7 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { AppItem, ReviewItem, UserProfile, AppSettings } from '../types.ts';
 import { INITIAL_APPS, INITIAL_REVIEWS } from '../data/seedApps.ts';
-import { getSupabase, signOutFromSupabase } from '../lib/supabase.ts';
+import {
+  getSupabase,
+  signOutFromSupabase,
+  incrementAppDownloadInSupabase,
+  updateUserProfileMetadata,
+} from '../lib/supabase.ts';
 import confetti from 'canvas-confetti';
 
 interface AppContextType {
@@ -19,6 +24,7 @@ interface AppContextType {
   installedAppIds: string[];
   isLoadingCloud: boolean;
   cloudSyncStatus: 'synced' | 'local' | 'error';
+  supabaseErrorNotice: string | null;
   // Handlers
   setSelectedApp: (app: AppItem | null) => void;
   setCurrentTab: (tab: 'today' | 'games' | 'apps' | 'arcade' | 'search' | 'admin') => void;
@@ -26,6 +32,7 @@ interface AppContextType {
   setSelectedTag: (tag: string | null) => void;
   setIsLoginModalOpen: (open: boolean) => void;
   setUserDirectly: (user: UserProfile | null) => void;
+  updateUserAvatar: (avatarUrl: string) => Promise<void>;
   logoutUser: () => Promise<void>;
   addApp: (appData: Omit<AppItem, 'id' | 'created_at' | 'downloads_count'>) => Promise<AppItem>;
   updateApp: (app: AppItem) => Promise<void>;
@@ -49,19 +56,57 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// Helper to get local custom published apps safely
+function getLocalPublishedApps(): AppItem[] {
+  try {
+    const saved = localStorage.getItem('appstore_published_apps_v2');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error('Error reading local published apps:', e);
+  }
+  return [];
+}
+
+// Resilient remote Supabase insertion helper that falls back gracefully if remote schema is missing newly added columns
+async function resilientInsertApp(client: any, app: AppItem): Promise<{ ok: boolean; error?: any }> {
+  try {
+    const { error } = await client.from('apps').insert([app]);
+    if (!error) return { ok: true };
+
+    const errMsg = (error.message || '').toLowerCase();
+    if (errMsg.includes('column') || errMsg.includes('schema') || errMsg.includes('does not exist')) {
+      // Retry without newer columns in case user hasn't run the latest migration SQL yet
+      const { video_url, compatibility, languages, downloads_count, release_notes, ...fallbackApp } = app as any;
+      const retry = await client.from('apps').insert([fallbackApp]);
+      if (!retry.error) return { ok: true };
+      return { ok: false, error: retry.error };
+    }
+
+    return { ok: false, error };
+  } catch (err) {
+    return { ok: false, error: err };
+  }
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load apps: remove previous mock demo apps if present
+  // Load initial apps from persistent local published apps storage first
   const [apps, setApps] = useState<AppItem[]>(() => {
+    const published = getLocalPublishedApps();
+    if (published.length > 0) {
+      return published;
+    }
     const saved = localStorage.getItem('appstore_apps_data_v2');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch (e) {
         console.error(e);
       }
     }
-    // Clean start without mock demo data
-    localStorage.removeItem('appstore_apps_data');
     return INITIAL_APPS;
   });
 
@@ -74,7 +119,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.error(e);
       }
     }
-    localStorage.removeItem('appstore_reviews_data');
     return INITIAL_REVIEWS;
   });
 
@@ -116,6 +160,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isLoadingCloud, setIsLoadingCloud] = useState(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'local' | 'error'>('local');
+  const [supabaseErrorNotice, setSupabaseErrorNotice] = useState<string | null>(null);
 
   // Persistence to local storage
   useEffect(() => {
@@ -170,7 +215,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           email,
           name: session.user.user_metadata?.full_name || (isAdmin ? 'Admin Developer' : email.split('@')[0]),
           is_admin: isAdmin,
-          avatar_url: isAdmin ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' : undefined,
+          avatar_url: session.user.user_metadata?.avatar_url || (isAdmin ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' : undefined),
         });
       }
     }).catch(err => {
@@ -186,10 +231,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           email,
           name: session.user.user_metadata?.full_name || (isAdmin ? 'Admin Developer' : email.split('@')[0]),
           is_admin: isAdmin,
-          avatar_url: isAdmin ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' : undefined,
+          avatar_url: session.user.user_metadata?.avatar_url || (isAdmin ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80' : undefined),
         });
       } else {
-        // Only clear if not manually stored admin
         const stored = localStorage.getItem('appstore_user_data');
         if (!stored) {
           setUser(null);
@@ -202,21 +246,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Attempt Supabase Apps Fetch on mount
+  // Resilient Supabase Apps Fetch & Merge on mount
   const refreshFromSupabase = async () => {
     try {
       setIsLoadingCloud(true);
       const client = getSupabase();
       const { data, error } = await client.from('apps').select('*').order('created_at', { ascending: false });
       
-      if (!error && data) {
-        setApps(data as AppItem[]);
+      const localPublished = getLocalPublishedApps();
+
+      if (!error && data && Array.isArray(data)) {
+        // Build deduplicated merge map: Supabase remote data + locally published data
+        const mergedMap = new Map<string, AppItem>();
+        // Add remote apps
+        data.forEach((app: any) => {
+          mergedMap.set(app.id, app as AppItem);
+        });
+        // Preserve local published apps that might not have reached Supabase yet
+        localPublished.forEach((app: AppItem) => {
+          if (!mergedMap.has(app.id)) {
+            mergedMap.set(app.id, app);
+            // Attempt to background insert into remote Supabase with automatic schema fallback
+            resilientInsertApp(client, app).then(({ ok, error: syncErr }) => {
+              if (!ok && syncErr) {
+                console.warn('Background sync of local app to Supabase notice:', syncErr?.message || syncErr);
+              }
+            });
+          }
+        });
+
+        const finalMerged = Array.from(mergedMap.values()).sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        setApps(finalMerged);
         setCloudSyncStatus('synced');
+        setSupabaseErrorNotice(null);
       } else {
+        // If Supabase query failed or table doesn't exist yet, NEVER wipe out published apps!
+        console.warn('Supabase fetch returned error or empty, keeping local apps:', error?.message);
+        if (localPublished.length > 0) {
+          setApps(localPublished);
+        }
         setCloudSyncStatus('local');
+        if (error) {
+          setSupabaseErrorNotice(error.message);
+        }
       }
-    } catch (err) {
-      console.warn('Supabase fetch notice, using active state:', err);
+    } catch (err: any) {
+      console.warn('Supabase fetch exception, keeping active state:', err);
+      const localPublished = getLocalPublishedApps();
+      if (localPublished.length > 0) {
+        setApps(localPublished);
+      }
       setCloudSyncStatus('local');
     } finally {
       setIsLoadingCloud(false);
@@ -232,6 +313,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (newUser?.is_admin) {
       setCurrentTab('admin');
     }
+  };
+
+  const updateUserAvatar = async (avatarUrl: string) => {
+    if (!user) return;
+    const updated = { ...user, avatar_url: avatarUrl };
+    setUser(updated);
+    localStorage.setItem('appstore_user_data', JSON.stringify(updated));
+    await updateUserProfileMetadata({ avatar_url: avatarUrl });
   };
 
   const logoutUser = async () => {
@@ -252,6 +341,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setReviews({});
     localStorage.removeItem('appstore_apps_data');
     localStorage.removeItem('appstore_apps_data_v2');
+    localStorage.removeItem('appstore_published_apps_v2');
     localStorage.removeItem('appstore_reviews_data');
     localStorage.removeItem('appstore_reviews_data_v2');
   };
@@ -264,13 +354,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       created_at: new Date().toISOString(),
     };
 
-    setApps((prev) => [newApp, ...prev]);
+    // 1. Immediately save to local published apps list to guarantee zero loss on reload
+    const currentLocal = getLocalPublishedApps();
+    const updatedLocal = [newApp, ...currentLocal.filter(a => a.id !== newApp.id)];
+    localStorage.setItem('appstore_published_apps_v2', JSON.stringify(updatedLocal));
 
+    // 2. Update reactive state
+    setApps((prev) => [newApp, ...prev.filter(a => a.id !== newApp.id)]);
+
+    // 3. Save to Supabase remote database with resilient schema fallback
     try {
       const client = getSupabase();
-      await client.from('apps').insert([newApp]);
-    } catch (err) {
-      console.warn('Supabase cloud insert queued locally:', err);
+      const { ok, error } = await resilientInsertApp(client, newApp);
+      if (!ok && error) {
+        console.warn('Supabase remote insert notice:', error);
+        setSupabaseErrorNotice(`Saved to browser store! Remote Supabase notice: ${error.message || 'Check connection'}. Run SQL Schema from Admin tab if table is not yet created.`);
+      } else {
+        setCloudSyncStatus('synced');
+        setSupabaseErrorNotice(null);
+      }
+    } catch (err: any) {
+      console.warn('Supabase cloud insert exception, safely queued locally:', err);
+      setSupabaseErrorNotice(`Saved locally! Supabase error: ${err?.message || 'Network error'}`);
     }
 
     return newApp;
@@ -281,6 +386,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (selectedApp && selectedApp.id === updatedApp.id) {
       setSelectedApp(updatedApp);
     }
+
+    // Update in local published apps
+    const currentLocal = getLocalPublishedApps();
+    const updatedLocal = currentLocal.map((a) => (a.id === updatedApp.id ? updatedApp : a));
+    localStorage.setItem('appstore_published_apps_v2', JSON.stringify(updatedLocal));
 
     try {
       const client = getSupabase();
@@ -295,6 +405,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (selectedApp && selectedApp.id === id) {
       setSelectedApp(null);
     }
+
+    // Remove from local published apps
+    const currentLocal = getLocalPublishedApps();
+    const updatedLocal = currentLocal.filter((a) => a.id !== id);
+    localStorage.setItem('appstore_published_apps_v2', JSON.stringify(updatedLocal));
 
     try {
       const client = getSupabase();
@@ -360,9 +475,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         setInstalledAppIds((prev) => (prev.includes(app.id) ? prev : [...prev, app.id]));
 
+        const newDownloadsCount = (app.downloads_count || 0) + 1;
+
+        // Update in state
         setApps((prev) =>
-          prev.map((a) => (a.id === app.id ? { ...a, downloads_count: (a.downloads_count || 0) + 1 } : a))
+          prev.map((a) => (a.id === app.id ? { ...a, downloads_count: newDownloadsCount } : a))
         );
+
+        // Update in local published apps
+        const currentLocal = getLocalPublishedApps();
+        const updatedLocal = currentLocal.map((a) =>
+          a.id === app.id ? { ...a, downloads_count: newDownloadsCount } : a
+        );
+        localStorage.setItem('appstore_published_apps_v2', JSON.stringify(updatedLocal));
+
+        // Sync download count to Supabase
+        incrementAppDownloadInSupabase(app.id, newDownloadsCount);
 
         try {
           confetti({
@@ -419,12 +547,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         installedAppIds,
         isLoadingCloud,
         cloudSyncStatus,
+        supabaseErrorNotice,
         setSelectedApp,
         setCurrentTab,
         setSearchQuery,
         setSelectedTag,
         setIsLoginModalOpen,
         setUserDirectly,
+        updateUserAvatar,
         logoutUser,
         addApp,
         updateApp,

@@ -5,6 +5,7 @@ import { GetButton } from './GetButton.tsx';
 import {
   X,
   ChevronLeft,
+  ChevronRight,
   Share2,
   Star,
   Download,
@@ -15,6 +16,10 @@ import {
   ThumbsUp,
   MessageSquarePlus,
   Check,
+  Play,
+  Film,
+  Video,
+  Maximize2,
 } from 'lucide-react';
 
 interface AppDetailModalProps {
@@ -23,9 +28,11 @@ interface AppDetailModalProps {
 }
 
 export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) => {
-  const { reviews, addReview, setSelectedTag, setCurrentTab, settings } = useAppStore();
+  const { apps, reviews, addReview, setSelectedTag, setCurrentTab, settings } = useAppStore();
+  const currentApp = apps.find((a) => a.id === app.id) || app;
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isWriteReviewOpen, setIsWriteReviewOpen] = useState(false);
+  const [selectedScreenshotIndex, setSelectedScreenshotIndex] = useState<number | null>(null);
   const [reviewForm, setReviewForm] = useState({
     author: '',
     rating: 5,
@@ -34,10 +41,10 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
   });
   const [copiedLink, setCopiedLink] = useState(false);
 
-  const appReviews = reviews[app.id] || [];
+  const appReviews = reviews[currentApp.id] || [];
 
   // Ratings calculation for histogram
-  const totalReviewsCount = (app.rating_count || 100) + appReviews.length;
+  const totalReviewsCount = (currentApp.rating_count || 100) + appReviews.length;
   const ratingDistribution = [
     { stars: 5, percent: 85 },
     { stars: 4, percent: 10 },
@@ -60,7 +67,7 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
       return;
     }
     await addReview({
-      appId: app.id,
+      appId: currentApp.id,
       author: reviewForm.author.trim(),
       rating: reviewForm.rating,
       title: reviewForm.title.trim(),
@@ -107,8 +114,8 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
             {/* Squircle App Icon */}
             <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-[22%] overflow-hidden shrink-0 shadow-lg shadow-black/10 border border-black/5 dark:border-white/10 bg-[#2c2c2e]">
               <img
-                src={app.icon_url}
-                alt={app.name}
+                src={currentApp.icon_url}
+                alt={currentApp.name}
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src =
@@ -120,20 +127,20 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
             <div className="flex-1 space-y-3">
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">
-                  {app.name}
+                  {currentApp.name}
                 </h1>
                 <p className="text-sm sm:text-base text-black/60 dark:text-white/60 font-medium mt-0.5">
-                  {app.subtitle}
+                  {currentApp.subtitle}
                 </p>
                 <p className="text-xs text-[#0071e3] font-medium mt-1">
-                  {app.developer}
+                  {currentApp.developer}
                 </p>
               </div>
 
               {/* Action row */}
               <div className="flex items-center gap-4 pt-1">
-                <GetButton app={app} size="lg" />
-                {app.in_app_purchases && (
+                <GetButton app={currentApp} size="lg" />
+                {currentApp.in_app_purchases && (
                   <span className="text-[11px] text-black/40 dark:text-white/40">
                     In-App Purchases
                   </span>
@@ -141,7 +148,7 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
                 {/* Direct Download Link Info */}
                 <span className="text-xs text-black/50 dark:text-white/50 flex items-center gap-1">
                   <Download className="w-3.5 h-3.5 text-black/40 dark:text-white/40" />
-                  {app.downloads_count.toLocaleString()} downloads
+                  {currentApp.downloads_count.toLocaleString()} downloads
                 </span>
               </div>
             </div>
@@ -155,11 +162,11 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
                 RATINGS
               </span>
               <div className="flex items-center gap-1 font-bold text-lg text-[#1d1d1f] dark:text-[#f5f5f7] my-0.5">
-                <span>{app.rating.toFixed(1)}</span>
+                <span>{currentApp.rating.toFixed(1)}</span>
                 <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
               </div>
               <span className="text-[10px] text-black/50 dark:text-white/50">
-                {app.rating_count ? `${Math.round(app.rating_count / 1000)}K Reviews` : 'Verified'}
+                {currentApp.rating_count ? `${Math.round(currentApp.rating_count / 1000)}K Reviews` : 'Verified'}
               </span>
             </div>
 
@@ -169,7 +176,7 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
                 AGE
               </span>
               <span className="font-bold text-lg text-[#1d1d1f] dark:text-[#f5f5f7] my-0.5">
-                {app.age_rating || '4+'}
+                {currentApp.age_rating || '4+'}
               </span>
               <span className="text-[10px] text-black/50 dark:text-white/50">Years Old</span>
             </div>
@@ -183,7 +190,7 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
                 #1
               </span>
               <span className="text-[10px] text-black/50 dark:text-white/50 truncate max-w-[80px]">
-                {app.category}
+                {currentApp.category}
               </span>
             </div>
 
@@ -194,19 +201,19 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
               </span>
               <Shield className="w-5 h-5 text-black/70 dark:text-white/70 my-1" />
               <span className="text-[10px] text-black/50 dark:text-white/50 truncate max-w-[80px]">
-                {app.developer.split(' ')[0]}
+                {currentApp.developer.split(' ')[0]}
               </span>
             </div>
 
-            {/* Language */}
+            {/* Downloads Metric */}
             <div className="flex flex-col items-center justify-center p-2 border-l border-black/[0.06] dark:border-white/[0.08]">
               <span className="text-[11px] uppercase tracking-wider font-semibold text-black/40 dark:text-white/40">
-                LANGUAGE
+                DOWNLOADS
               </span>
-              <span className="font-bold text-lg text-[#1d1d1f] dark:text-[#f5f5f7] my-0.5">
-                EN
+              <span className="font-bold text-lg text-emerald-600 dark:text-emerald-400 my-0.5">
+                {currentApp.downloads_count.toLocaleString()}
               </span>
-              <span className="text-[10px] text-black/50 dark:text-white/50">+6 More</span>
+              <span className="text-[10px] text-black/50 dark:text-white/50">Installed</span>
             </div>
 
             {/* File Size */}
@@ -215,52 +222,97 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
                 SIZE
               </span>
               <span className="font-bold text-lg text-[#1d1d1f] dark:text-[#f5f5f7] my-0.5">
-                {app.file_size || '68 MB'}
+                {currentApp.file_size || '68 MB'}
               </span>
               <span className="text-[10px] text-black/50 dark:text-white/50">Direct File</span>
             </div>
           </div>
 
-          {/* Screenshots Gallery */}
-          {app.screenshots && app.screenshots.length > 0 && (
+          {/* Video Trailer / Demo Section (if available) */}
+          {currentApp.video_url && (
             <div className="space-y-3">
-              <h2 className="text-xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">
-                Preview
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7] flex items-center gap-2">
+                  <Film className="w-5 h-5 text-purple-500" />
+                  <span>Preview Video &amp; Trailer</span>
+                </h2>
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider bg-purple-500/15 text-purple-600 dark:text-purple-400">
+                  Trailer
+                </span>
+              </div>
+              <div className="relative rounded-3xl overflow-hidden border border-black/10 dark:border-white/10 bg-black shadow-xl aspect-video max-w-3xl mx-auto">
+                {currentApp.video_url.includes('youtube.com/embed') || currentApp.video_url.includes('player.vimeo.com') ? (
+                  <iframe
+                    src={currentApp.video_url}
+                    title={`${currentApp.name} Trailer`}
+                    className="w-full h-full border-0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <video
+                    src={currentApp.video_url}
+                    controls
+                    playsInline
+                    poster={currentApp.screenshots?.[0]}
+                    className="w-full h-full object-cover"
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Screenshots Gallery */}
+          {currentApp.screenshots && currentApp.screenshots.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">
+                  Preview ({currentApp.screenshots.length} Screenshots)
+                </h2>
+                <span className="text-xs text-black/40 dark:text-white/40">
+                  Click any image to enlarge
+                </span>
+              </div>
               <div className="flex gap-4 overflow-x-auto pb-4 pt-1 snap-x scrollbar-thin">
-                {app.screenshots.map((src, index) => (
-                  <div
+                {currentApp.screenshots.map((src, index) => (
+                  <button
                     key={index}
-                    className="relative shrink-0 w-64 sm:w-72 h-[380px] sm:h-[420px] rounded-2xl overflow-hidden shadow-md border border-black/10 dark:border-white/10 bg-black/10 snap-center group"
+                    type="button"
+                    onClick={() => setSelectedScreenshotIndex(index)}
+                    className="relative shrink-0 w-64 sm:w-72 h-[380px] sm:h-[420px] rounded-2xl overflow-hidden shadow-md border border-black/10 dark:border-white/10 bg-black/10 snap-center group text-left cursor-zoom-in"
                   >
                     <img
                       src={src}
-                      alt={`${app.name} preview ${index + 1}`}
+                      alt={`${currentApp.name} preview ${index + 1}`}
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src =
                           'https://images.unsplash.com/photo-1541701494587-cb58502866ab?w=1080&auto=format&fit=crop&q=80';
                       }}
                     />
-                  </div>
+                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white gap-1.5 font-medium text-xs">
+                      <Maximize2 className="w-4 h-4" />
+                      <span>View Fullscreen</span>
+                    </div>
+                  </button>
                 ))}
               </div>
             </div>
           )}
 
           {/* What's New */}
-          {app.whats_new && (
+          {currentApp.whats_new && (
             <div className="p-5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.04] dark:border-white/[0.06] space-y-2">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
                   What&apos;s New
                 </h2>
                 <span className="text-xs text-black/50 dark:text-white/50">
-                  Version {app.version}
+                  Version {currentApp.version}
                 </span>
               </div>
               <p className="text-sm text-black/70 dark:text-white/70 leading-relaxed whitespace-pre-line">
-                {app.whats_new}
+                {currentApp.whats_new}
               </p>
             </div>
           )}
@@ -275,7 +327,7 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
                 isDescriptionExpanded ? '' : 'line-clamp-4'
               }`}
             >
-              {app.description}
+              {currentApp.description}
             </div>
             <button
               onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
@@ -286,13 +338,13 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
           </div>
 
           {/* Hashtags Strip */}
-          {app.tags && app.tags.length > 0 && (
+          {currentApp.tags && currentApp.tags.length > 0 && (
             <div className="space-y-2 pt-2">
               <span className="text-xs font-semibold text-black/40 dark:text-white/40 uppercase tracking-wider">
                 Related #Tags
               </span>
               <div className="flex flex-wrap gap-2">
-                {app.tags.map((tag) => (
+                {currentApp.tags.map((tag) => (
                   <button
                     key={tag}
                     onClick={() => {
@@ -333,14 +385,14 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
             <div className="flex flex-col md:flex-row gap-6 items-center p-6 rounded-2xl bg-black/[0.02] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.05]">
               <div className="text-center md:text-left shrink-0">
                 <div className="text-5xl font-extrabold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">
-                  {app.rating.toFixed(1)}
+                  {currentApp.rating.toFixed(1)}
                 </div>
                 <div className="flex items-center justify-center md:justify-start gap-1 my-1 text-amber-400">
                   {[...Array(5)].map((_, i) => (
                     <Star
                       key={i}
                       className={`w-4 h-4 ${
-                        i < Math.floor(app.rating) ? 'fill-current' : 'fill-none stroke-current'
+                        i < Math.floor(currentApp.rating) ? 'fill-current' : 'fill-none stroke-current'
                       }`}
                     />
                   ))}
@@ -413,47 +465,47 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
             <div className="divide-y divide-black/[0.06] dark:divide-white/[0.08] text-xs">
               <div className="py-2.5 flex justify-between">
                 <span className="text-black/50 dark:text-white/50">Provider</span>
-                <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{app.developer}</span>
+                <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{currentApp.developer}</span>
               </div>
               <div className="py-2.5 flex justify-between">
                 <span className="text-black/50 dark:text-white/50">Size</span>
-                <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{app.file_size}</span>
+                <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{currentApp.file_size}</span>
               </div>
               <div className="py-2.5 flex justify-between">
                 <span className="text-black/50 dark:text-white/50">Category</span>
-                <span className="font-medium text-[#0071e3]">{app.category}</span>
+                <span className="font-medium text-[#0071e3]">{currentApp.category}</span>
               </div>
               <div className="py-2.5 flex justify-between">
                 <span className="text-black/50 dark:text-white/50">Compatibility</span>
                 <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7] text-right max-w-xs">
-                  {app.compatibility || 'Works on iPhone and iPad'}
+                  {currentApp.compatibility || 'Works on iPhone and iPad'}
                 </span>
               </div>
               <div className="py-2.5 flex justify-between">
                 <span className="text-black/50 dark:text-white/50">Languages</span>
                 <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
-                  {app.languages ? app.languages.join(', ') : 'English, Spanish, French, German'}
+                  {currentApp.languages ? currentApp.languages.join(', ') : 'English, Spanish, French, German'}
                 </span>
               </div>
               <div className="py-2.5 flex justify-between">
                 <span className="text-black/50 dark:text-white/50">Age Rating</span>
-                <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{app.age_rating || '4+'}</span>
+                <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">{currentApp.age_rating || '4+'}</span>
               </div>
               <div className="py-2.5 flex justify-between">
                 <span className="text-black/50 dark:text-white/50">Direct Download File</span>
                 <a
-                  href={app.download_url}
+                  href={currentApp.download_url}
                   target="_blank"
                   rel="noreferrer"
                   className="font-medium text-[#0071e3] hover:underline truncate max-w-xs"
                 >
-                  {app.download_url}
+                  {currentApp.download_url}
                 </a>
               </div>
               <div className="py-2.5 flex justify-between">
                 <span className="text-black/50 dark:text-white/50">Copyright</span>
                 <span className="font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
-                  © 2026 {app.developer}. All rights reserved.
+                  © 2026 {currentApp.developer}. All rights reserved.
                 </span>
               </div>
             </div>
@@ -558,6 +610,55 @@ export const AppDetailModal: React.FC<AppDetailModalProps> = ({ app, onClose }) 
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Screenshot Fullscreen Lightbox Modal */}
+      {selectedScreenshotIndex !== null && app.screenshots && app.screenshots[selectedScreenshotIndex] && (
+        <div className="fixed inset-0 z-70 bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 animate-fade-in">
+          <button
+            onClick={() => setSelectedScreenshotIndex(null)}
+            className="absolute top-5 right-5 p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            title="Close preview"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          <button
+            onClick={() =>
+              setSelectedScreenshotIndex((prev) =>
+                prev !== null && prev > 0 ? prev - 1 : app.screenshots.length - 1
+              )
+            }
+            className="absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            title="Previous screenshot"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+
+          <div className="max-h-[85vh] max-w-[90vw] flex items-center justify-center">
+            <img
+              src={app.screenshots[selectedScreenshotIndex]}
+              alt={`Screenshot ${selectedScreenshotIndex + 1}`}
+              className="max-h-[85vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl border border-white/10"
+            />
+          </div>
+
+          <button
+            onClick={() =>
+              setSelectedScreenshotIndex((prev) =>
+                prev !== null && prev < app.screenshots.length - 1 ? prev + 1 : 0
+              )
+            }
+            className="absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            title="Next screenshot"
+          >
+            <ChevronRight className="w-6 h-6" />
+          </button>
+
+          <div className="absolute bottom-6 px-4 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-white text-xs font-semibold">
+            {selectedScreenshotIndex + 1} / {app.screenshots.length}
           </div>
         </div>
       )}

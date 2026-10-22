@@ -26,6 +26,7 @@ export interface AppItem {
   price: number; // 0 for Free
   age_rating: string; // "4+", "9+", "12+", "17+"
   screenshots: string[];
+  video_url?: string; // YouTube / Vimeo / direct MP4 video link or uploaded video data
   tags: string[];
   whats_new?: string;
   in_app_purchases?: boolean;
@@ -44,6 +45,7 @@ export interface UserProfile {
   name: string;
   avatar_url?: string;
   is_admin: boolean;
+  created_at?: string;
 }
 
 export interface AppSettings {

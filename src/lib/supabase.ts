@@ -61,6 +61,7 @@ export async function signInWithSupabase(email: string, password: string) {
  */
 export async function signUpWithSupabase(email: string, password: string, fullName?: string) {
   const client = getSupabase();
+  const redirectUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
   const { data, error } = await client.auth.signUp({
     email,
     password,
@@ -68,10 +69,44 @@ export async function signUpWithSupabase(email: string, password: string, fullNa
       data: {
         full_name: fullName || email.split('@')[0],
       },
+      emailRedirectTo: redirectUrl,
     },
   });
   if (error) throw error;
   return data;
+}
+
+/**
+ * Real Supabase Authentication: Sign In with Google
+ */
+export async function signInWithGoogleSupabase() {
+  const client = getSupabase();
+  const redirectUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
+  const { data, error } = await client.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: redirectUrl,
+    },
+  });
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Update user avatar or profile in Supabase Auth metadata
+ */
+export async function updateUserProfileMetadata(updates: { avatar_url?: string; full_name?: string }) {
+  try {
+    const client = getSupabase();
+    const { data, error } = await client.auth.updateUser({
+      data: updates,
+    });
+    if (error) console.warn('Supabase updateUser error:', error.message);
+    return data;
+  } catch (err) {
+    console.warn('Could not sync user profile to Supabase:', err);
+    return null;
+  }
 }
 
 /**
@@ -81,6 +116,18 @@ export async function signOutFromSupabase() {
   const client = getSupabase();
   const { error } = await client.auth.signOut();
   if (error) throw error;
+}
+
+/**
+ * Update app download count in Supabase
+ */
+export async function incrementAppDownloadInSupabase(appId: string, newDownloadsCount: number) {
+  try {
+    const client = getSupabase();
+    await client.from('apps').update({ downloads_count: newDownloadsCount }).eq('id', appId);
+  } catch (err) {
+    console.warn('Supabase download counter increment error:', err);
+  }
 }
 
 /**
@@ -184,6 +231,7 @@ CREATE TABLE IF NOT EXISTS public.apps (
     price NUMERIC DEFAULT 0,
     age_rating TEXT DEFAULT '4+',
     screenshots TEXT[] DEFAULT '{}',
+    video_url TEXT,
     tags TEXT[] DEFAULT '{}',
     whats_new TEXT,
     in_app_purchases BOOLEAN DEFAULT false,
@@ -191,8 +239,15 @@ CREATE TABLE IF NOT EXISTS public.apps (
     is_featured BOOLEAN DEFAULT false,
     is_app_of_the_day BOOLEAN DEFAULT false,
     downloads_count INTEGER DEFAULT 0,
+    compatibility TEXT DEFAULT 'Requires iOS 16.0 or later. Compatible with iPhone, iPad, and Mac.',
+    languages TEXT[] DEFAULT '{"English"}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Quick migration if table already exists in your Supabase project:
+ALTER TABLE public.apps ADD COLUMN IF NOT EXISTS video_url TEXT;
+ALTER TABLE public.apps ADD COLUMN IF NOT EXISTS compatibility TEXT;
+ALTER TABLE public.apps ADD COLUMN IF NOT EXISTS languages TEXT[] DEFAULT '{}';
 
 -- 2. Create 'reviews' table
 CREATE TABLE IF NOT EXISTS public.reviews (
