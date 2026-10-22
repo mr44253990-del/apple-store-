@@ -4,7 +4,6 @@
   "framework": "vite",
   "installCommand": "npm install --legacy-peer-deps",
   "routes": [
-    { "src": "/app/(.*)", "dest": "/index.html" },
-    { "src": "/(.*)", "dest": "/index.html" }
+    { "src": "/app/(.*)", "dest": "/index.html" }
   ]
 }
