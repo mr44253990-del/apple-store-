@@ -1,0 +1,6 @@
+{
+  "name": "App Store - Discover & Download Apps",
+  "description": "Authentic Apple App Store web experience to discover, search, and download top apps, featuring App Store Connect admin management, cloud storage, auto tags, and fake reviews.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
