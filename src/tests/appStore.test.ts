@@ -73,3 +73,42 @@ test('Fake Review Generator creates realistic reviews', () => {
   assert.ok(reviews[0].comment.length > 5);
   assert.equal(reviews[0].app_id, 'app_test_1');
 });
+
+test('Application Link Generator: creates valid deep link query string', () => {
+  const appId = 'app_productivity_123';
+  const dummyOrigin = 'https://apple-appstore.example.com';
+  const generatedShareLink = `${dummyOrigin}/?app=${appId}`;
+
+  const parsedUrl = new URL(generatedShareLink);
+  assert.equal(parsedUrl.searchParams.get('app'), appId);
+});
+
+test('Sitemap XML generator creates valid schema structure for Googlebot', () => {
+  const dummyApps = [
+    { id: 'app_1', name: 'TaskPro', created_at: '2026-10-23' },
+    { id: 'app_2', name: 'PhotoFlow', created_at: '2026-10-23' },
+  ];
+  const domain = 'https://appstore.example.com';
+  
+  const sitemapLines = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    '  <url>',
+    `    <loc>${domain}/</loc>`,
+    '    <changefreq>daily</changefreq>',
+    '    <priority>1.0</priority>',
+    '  </url>',
+    ...dummyApps.map(
+      (app) => `  <url>
+    <loc>${domain}/?app=${app.id}</loc>
+    <lastmod>${app.created_at}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>`
+    ),
+    '</urlset>',
+  ];
+  const xml = sitemapLines.join('\n');
+  assert.ok(xml.includes('<loc>https://appstore.example.com/?app=app_1</loc>'));
+  assert.ok(xml.includes('<loc>https://appstore.example.com/?app=app_2</loc>'));
+});

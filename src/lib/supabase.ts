@@ -160,10 +160,15 @@ export async function uploadAppFile(file: File, bucketName = 'apps'): Promise<st
     console.warn('Storage upload error, using local data URL fallback:', err);
   }
 
-  // Fallback: Read as ObjectURL or DataURL for instant local preview/download
+  // Resilient fallback: For files over 1.5MB (APK, IPA, ZIP, DMG, videos), use ObjectURL to prevent quota crashes.
+  if (file.size > 1.5 * 1024 * 1024 || !file.type.startsWith('image/')) {
+    return URL.createObjectURL(file);
+  }
+
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => resolve(URL.createObjectURL(file));
     reader.readAsDataURL(file);
   });
 }

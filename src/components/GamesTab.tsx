@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useAppStore } from '../context/AppContext.tsx';
 import { GetButton } from './GetButton.tsx';
-import { Gamepad2, Trophy, Star } from 'lucide-react';
+import { AppIcon } from './AppIcon.tsx';
+import { Gamepad2, Trophy, Star, Share2 } from 'lucide-react';
 
 export const GamesTab: React.FC = () => {
-  const { apps, setSelectedApp } = useAppStore();
+  const { apps, setSelectedApp, setSharingApp } = useAppStore();
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>('All');
 
   const gameApps = apps.filter((a) => a.category === 'Games' || a.category === 'Arcade');
@@ -62,13 +63,7 @@ export const GamesTab: React.FC = () => {
                   <span className="text-lg font-black text-black/30 dark:text-white/30 w-5 text-center shrink-0">
                     {index + 1}
                   </span>
-                  <div className="w-14 h-14 rounded-[22%] overflow-hidden bg-black/5 dark:bg-white/5 shrink-0 shadow-xs border border-black/5 dark:border-white/10">
-                    <img
-                      src={app.icon_url}
-                      alt={app.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                    />
-                  </div>
+                  <AppIcon name={app.name} iconUrl={app.icon_url} size="md" />
                   <div className="overflow-hidden">
                     <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7] truncate">
                       {app.name}
@@ -91,7 +86,15 @@ export const GamesTab: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => setSharingApp(app)}
+                    className="p-1.5 rounded-xl hover:bg-black/[0.06] dark:hover:bg-white/[0.1] text-black/50 dark:text-white/50 hover:text-sky-500 transition-colors"
+                    title="Share App Link & QR"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                  </button>
                   <GetButton app={app} size="sm" />
                 </div>
               </div>

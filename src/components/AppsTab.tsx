@@ -1,10 +1,11 @@
 import React from 'react';
 import { useAppStore } from '../context/AppContext.tsx';
 import { GetButton } from './GetButton.tsx';
-import { Sparkles, Layers, ShieldCheck } from 'lucide-react';
+import { AppIcon } from './AppIcon.tsx';
+import { Sparkles, Layers, ShieldCheck, Share2 } from 'lucide-react';
 
 export const AppsTab: React.FC = () => {
-  const { apps, setSelectedApp } = useAppStore();
+  const { apps, setSelectedApp, setSharingApp } = useAppStore();
 
   const productivityApps = apps.filter(
     (a) => a.category === 'Productivity' || a.category === 'Utilities'
@@ -43,13 +44,7 @@ export const AppsTab: React.FC = () => {
                     className="p-4 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-black/5 dark:border-white/10 hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-3 group"
                   >
                     <div className="flex items-center gap-3 overflow-hidden">
-                      <div className="w-14 h-14 rounded-[22%] overflow-hidden bg-black/5 dark:bg-white/5 shrink-0 shadow-xs border border-black/5 dark:border-white/10">
-                        <img
-                          src={app.icon_url}
-                          alt={app.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                      </div>
+                      <AppIcon name={app.name} iconUrl={app.icon_url} size="md" />
                       <div className="overflow-hidden">
                         <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7] truncate">
                           {app.name}
@@ -72,7 +67,15 @@ export const AppsTab: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => setSharingApp(app)}
+                        className="p-1.5 rounded-xl hover:bg-black/[0.06] dark:hover:bg-white/[0.1] text-black/50 dark:text-white/50 hover:text-sky-500 transition-colors"
+                        title="Share App Link & QR"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                      </button>
                       <GetButton app={app} size="sm" />
                     </div>
                   </div>
@@ -97,13 +100,7 @@ export const AppsTab: React.FC = () => {
                     className="p-4 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-black/5 dark:border-white/10 hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-3 group"
                   >
                     <div className="flex items-center gap-3 overflow-hidden">
-                      <div className="w-14 h-14 rounded-[22%] overflow-hidden bg-black/5 dark:bg-white/5 shrink-0 shadow-xs border border-black/5 dark:border-white/10">
-                        <img
-                          src={app.icon_url}
-                          alt={app.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                      </div>
+                      <AppIcon name={app.name} iconUrl={app.icon_url} size="md" />
                       <div className="overflow-hidden">
                         <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7] truncate">
                           {app.name}
@@ -126,7 +123,15 @@ export const AppsTab: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => setSharingApp(app)}
+                        className="p-1.5 rounded-xl hover:bg-black/[0.06] dark:hover:bg-white/[0.1] text-black/50 dark:text-white/50 hover:text-sky-500 transition-colors"
+                        title="Share App Link & QR"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                      </button>
                       <GetButton app={app} size="sm" />
                     </div>
                   </div>

@@ -24,11 +24,11 @@ import {
 } from 'lucide-react';
 
 const PRESET_AVATARS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1628157582853-a796fa650a6a?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%230071e3"/><stop offset="100%" stop-color="%2342a5f5"/></linearGradient></defs><circle cx="50" cy="50" r="50" fill="url(%23g1)"/><circle cx="50" cy="38" r="18" fill="white"/><ellipse cx="50" cy="80" rx="30" ry="20" fill="white"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%238e2de2"/><stop offset="100%" stop-color="%234a00e0"/></linearGradient></defs><circle cx="50" cy="50" r="50" fill="url(%23g2)"/><circle cx="50" cy="38" r="18" fill="white"/><ellipse cx="50" cy="80" rx="30" ry="20" fill="white"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g3" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%2311998e"/><stop offset="100%" stop-color="%2338ef7d"/></linearGradient></defs><circle cx="50" cy="50" r="50" fill="url(%23g3)"/><circle cx="50" cy="38" r="18" fill="white"/><ellipse cx="50" cy="80" rx="30" ry="20" fill="white"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g4" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%23ff8c00"/><stop offset="100%" stop-color="%23e52d27"/></linearGradient></defs><circle cx="50" cy="50" r="50" fill="url(%23g4)"/><circle cx="50" cy="38" r="18" fill="white"/><ellipse cx="50" cy="80" rx="30" ry="20" fill="white"/></svg>',
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g5" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="%23303030"/><stop offset="100%" stop-color="%23121212"/></linearGradient></defs><circle cx="50" cy="50" r="50" fill="url(%23g5)"/><circle cx="50" cy="38" r="18" fill="white"/><ellipse cx="50" cy="80" rx="30" ry="20" fill="white"/></svg>',
 ];
 
 export const LoginModal: React.FC = () => {
@@ -131,9 +131,7 @@ export const LoginModal: React.FC = () => {
             is_admin: isAdmin,
             avatar_url:
               authData.user?.user_metadata?.avatar_url ||
-              (isAdmin
-                ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
-                : avatarUrl),
+              (isAdmin ? PRESET_AVATARS[0] : avatarUrl),
           });
           setIsLoginModalOpen(false);
         } catch (supabaseErr: any) {
@@ -145,9 +143,7 @@ export const LoginModal: React.FC = () => {
               email: trimmedEmail,
               name: 'Admin Developer',
               is_admin: true,
-              avatar_url:
-                avatarUrl ||
-                'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+              avatar_url: avatarUrl || PRESET_AVATARS[0],
             });
             setIsLoginModalOpen(false);
             return;
@@ -193,7 +189,7 @@ export const LoginModal: React.FC = () => {
                   src={
                     user.avatar_url ||
                     avatarUrl ||
-                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'
+                    PRESET_AVATARS[0]
                   }
                   alt={user.name}
                   className="w-full h-full object-cover"

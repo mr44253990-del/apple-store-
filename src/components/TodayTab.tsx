@@ -2,10 +2,11 @@ import React from 'react';
 import { useAppStore } from '../context/AppContext.tsx';
 import { GetButton } from './GetButton.tsx';
 import { AppleStoreIcon } from './AppleStoreIcon.tsx';
-import { Sparkles, Star, Download, ChevronRight, PlusCircle, ShieldCheck } from 'lucide-react';
+import { AppIcon } from './AppIcon.tsx';
+import { Sparkles, Star, Download, ChevronRight, PlusCircle, ShieldCheck, Share2 } from 'lucide-react';
 
 export const TodayTab: React.FC = () => {
-  const { apps, setSelectedApp, setSelectedTag, setCurrentTab, user, setIsLoginModalOpen } = useAppStore();
+  const { apps, setSelectedApp, setSelectedTag, setCurrentTab, user, setIsLoginModalOpen, setSharingApp } = useAppStore();
 
   const appOfTheDay = apps.find((a) => a.is_app_of_the_day) || apps[0];
   const featuredApps = apps.filter((a) => a.id !== appOfTheDay?.id).slice(0, 6);
@@ -101,12 +102,21 @@ export const TodayTab: React.FC = () => {
               onClick={() => setSelectedApp(appOfTheDay)}
               className="group relative rounded-3xl overflow-hidden cursor-pointer shadow-xl shadow-black/10 dark:shadow-black/40 border border-black/5 dark:border-white/10 transition-transform duration-300 hover:scale-[1.01] active:scale-[0.99] bg-[#1c1c1e]"
             >
-              <div className="relative h-96 sm:h-[460px] w-full overflow-hidden">
-                <img
-                  src={appOfTheDay.screenshots[0] || appOfTheDay.icon_url}
-                  alt={appOfTheDay.name}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                />
+              <div className="relative h-96 sm:h-[460px] w-full overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900">
+                {appOfTheDay.screenshots && appOfTheDay.screenshots.length > 0 ? (
+                  <img
+                    src={appOfTheDay.screenshots[0]}
+                    alt={appOfTheDay.name}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center opacity-30">
+                    <AppIcon name={appOfTheDay.name} size="xl" className="scale-150" />
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
                 
                 <div className="absolute top-6 left-6 flex items-center gap-2 px-3 py-1 rounded-full bg-black/40 backdrop-blur-md text-white text-xs font-bold uppercase tracking-wider border border-white/10">
@@ -114,15 +124,23 @@ export const TodayTab: React.FC = () => {
                   <span>APP OF THE DAY</span>
                 </div>
 
+                <div className="absolute top-6 right-6 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSharingApp(appOfTheDay);
+                    }}
+                    className="p-2 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-md text-white text-xs border border-white/10 transition-colors"
+                    title="Share App Link & QR Code"
+                  >
+                    <Share2 className="w-4 h-4" />
+                  </button>
+                </div>
+
                 <div className="absolute bottom-6 left-6 right-6 flex items-end justify-between gap-4 text-white">
                   <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-[22%] overflow-hidden bg-white/10 shadow-lg shrink-0 border border-white/20">
-                      <img
-                        src={appOfTheDay.icon_url}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
+                    <AppIcon name={appOfTheDay.name} iconUrl={appOfTheDay.icon_url} size="lg" className="border border-white/20 shadow-xl" />
                     <div className="space-y-1">
                       <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight">
                         {appOfTheDay.name}
@@ -150,7 +168,15 @@ export const TodayTab: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <div className="shrink-0 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => setSharingApp(appOfTheDay)}
+                      className="p-2.5 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/20 text-white transition-colors"
+                      title="Share Link"
+                    >
+                      <Share2 className="w-4 h-4" />
+                    </button>
                     <GetButton
                       app={appOfTheDay}
                       size="lg"
@@ -191,13 +217,7 @@ export const TodayTab: React.FC = () => {
                     className="p-4 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-black/5 dark:border-white/10 hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-3 group"
                   >
                     <div className="flex items-center gap-3 overflow-hidden">
-                      <div className="w-14 h-14 rounded-[22%] overflow-hidden bg-black/5 dark:bg-white/5 shrink-0 shadow-xs border border-black/5 dark:border-white/10">
-                        <img
-                          src={app.icon_url}
-                          alt={app.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                      </div>
+                      <AppIcon name={app.name} iconUrl={app.icon_url} size="md" />
                       <div className="overflow-hidden">
                         <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7] truncate">
                           {app.name}
@@ -220,7 +240,15 @@ export const TodayTab: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => setSharingApp(app)}
+                        className="p-1.5 rounded-xl hover:bg-black/[0.06] dark:hover:bg-white/[0.1] text-black/50 dark:text-white/50 hover:text-sky-500 transition-colors"
+                        title="Share App Link & QR"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                      </button>
                       <GetButton app={app} size="sm" />
                     </div>
                   </div>
