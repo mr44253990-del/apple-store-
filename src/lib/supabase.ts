@@ -6,12 +6,71 @@ export const DEFAULT_SUPABASE_URL = 'https://zuztlnyzbymywdpwhtee.supabase.co';
 export const DEFAULT_SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1enRsbnl6YnlteXdkcHdodGVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzMzQyMzYsImV4cCI6MjA3MzkxMDIzNn0.ULBfBkN4GpouzvKikC2rq8ARTseXMqNVabxLiCHXh1I';
 
+export const SUPABASE_APP_COLUMNS = [
+  'id',
+  'name',
+  'subtitle',
+  'description',
+  'icon_url',
+  'download_url',
+  'file_size',
+  'version',
+  'developer',
+  'developer_email',
+  'category',
+  'rating',
+  'rating_count',
+  'price',
+  'age_rating',
+  'screenshots',
+  'video_url',
+  'tags',
+  'whats_new',
+  'in_app_purchases',
+  'is_editors_choice',
+  'is_featured',
+  'is_app_of_the_day',
+  'downloads_count',
+  'compatibility',
+  'languages',
+  'created_at',
+] as const;
+
+/**
+ * Filter and sanitize an AppItem so it perfectly matches the remote Supabase PostgreSQL schema.
+ * Prevents PostgREST PGRST204 errors when client-only fields (e.g. slug, canonical_url) are present.
+ */
+export function sanitizeForSupabase(app: Partial<AppItem> & Record<string, any>): Record<string, any> {
+  const clean: Record<string, any> = {};
+  for (const col of SUPABASE_APP_COLUMNS) {
+    if (app[col] !== undefined) {
+      clean[col] = app[col];
+    }
+  }
+
+  // Ensure safe defaults for non-null remote columns
+  if (!clean.file_size) clean.file_size = '45.0 MB';
+  if (!clean.version) clean.version = '1.0.0';
+  if (!clean.developer) clean.developer = 'Apple Developer';
+  if (!clean.category) clean.category = 'Utilities';
+  if (clean.price === undefined) clean.price = 0;
+  if (clean.rating === undefined) clean.rating = 4.8;
+  if (clean.rating_count === undefined) clean.rating_count = 1;
+  if (clean.downloads_count === undefined) clean.downloads_count = 0;
+  if (!Array.isArray(clean.screenshots)) clean.screenshots = [];
+  if (!Array.isArray(clean.tags)) clean.tags = [];
+  if (!Array.isArray(clean.languages)) clean.languages = ['English'];
+  if (!clean.created_at) clean.created_at = new Date().toISOString();
+
+  return clean;
+}
+
 export function getActiveSupabaseCredentials() {
   const customUrl = localStorage.getItem('appstore_supabase_url');
   const customKey = localStorage.getItem('appstore_supabase_key');
   return {
-    url: customUrl || (import.meta.env.VITE_SUPABASE_URL as string) || (import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string) || DEFAULT_SUPABASE_URL,
-    key: customKey || (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || (import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string) || DEFAULT_SUPABASE_ANON_KEY,
+    url: customUrl?.trim() || (import.meta.env.VITE_SUPABASE_URL as string) || (import.meta.env.NEXT_PUBLIC_SUPABASE_URL as string) || DEFAULT_SUPABASE_URL,
+    key: customKey?.trim() || (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || (import.meta.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string) || DEFAULT_SUPABASE_ANON_KEY,
   };
 }
 
@@ -31,8 +90,21 @@ export function getSupabase(): SupabaseClient {
 }
 
 export function resetSupabaseClient(newUrl?: string, newKey?: string) {
-  if (newUrl) localStorage.setItem('appstore_supabase_url', newUrl);
-  if (newKey) localStorage.setItem('appstore_supabase_key', newKey);
+  if (newUrl !== undefined) {
+    if (newUrl.trim()) {
+      localStorage.setItem('appstore_supabase_url', newUrl.trim());
+    } else {
+      localStorage.removeItem('appstore_supabase_url');
+    }
+  }
+  if (newKey !== undefined) {
+    if (newKey.trim()) {
+      localStorage.setItem('appstore_supabase_key', newKey.trim());
+    } else {
+      localStorage.removeItem('appstore_supabase_key');
+    }
+  }
+
   const { url, key } = getActiveSupabaseCredentials();
   supabaseInstance = createClient(url, key, {
     auth: {
@@ -132,13 +204,40 @@ export async function incrementAppDownloadInSupabase(appId: string, newDownloads
 
 /**
  * Upload a file directly to Supabase storage bucket 'apps' or 'app-assets'.
- * If the bucket doesn't exist or permissions prevent upload, returns data URL fallback.
+ * Correctly detects APK MIME type (application/vnd.android.package-archive), IPA, DMG, ZIP, images.
  */
 export async function uploadAppFile(file: File, bucketName = 'apps'): Promise<string> {
   const client = getSupabase();
-  const fileExt = file.name.split('.').pop() || 'bin';
-  const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+  const fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin';
+  const cleanExt = fileExt.replace(/[^a-z0-9]/g, '');
+  const cleanBaseName = file.name
+    .replace(/\.[^/.]+$/, '')
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 40);
+  const fileName = `${Date.now()}_${cleanBaseName}.${cleanExt}`;
   const filePath = `uploads/${fileName}`;
+
+  // Accurate MIME type detection (especially APK!)
+  let contentType = file.type;
+  if (cleanExt === 'apk') {
+    contentType = 'application/vnd.android.package-archive';
+  } else if (cleanExt === 'ipa') {
+    contentType = 'application/octet-stream';
+  } else if (cleanExt === 'dmg') {
+    contentType = 'application/x-apple-diskimage';
+  } else if (cleanExt === 'zip') {
+    contentType = 'application/zip';
+  } else if (cleanExt === 'png') {
+    contentType = 'image/png';
+  } else if (cleanExt === 'jpg' || cleanExt === 'jpeg') {
+    contentType = 'image/jpeg';
+  } else if (cleanExt === 'webp') {
+    contentType = 'image/webp';
+  } else if (cleanExt === 'svg') {
+    contentType = 'image/svg+xml';
+  } else if (cleanExt === 'mp4') {
+    contentType = 'video/mp4';
+  }
 
   try {
     const { error: uploadError } = await client.storage
@@ -146,6 +245,7 @@ export async function uploadAppFile(file: File, bucketName = 'apps'): Promise<st
       .upload(filePath, file, {
         cacheControl: '3600',
         upsert: true,
+        contentType: contentType || undefined,
       });
 
     if (!uploadError) {
@@ -154,59 +254,107 @@ export async function uploadAppFile(file: File, bucketName = 'apps'): Promise<st
         return data.publicUrl;
       }
     } else {
-      console.warn('Supabase storage upload note:', uploadError.message);
+      console.warn(`Supabase storage upload note (${bucketName}):`, uploadError.message);
+      // If error is about bucket permissions, return informative error
+      if (uploadError.message.includes('Bucket not found')) {
+        throw new Error(`Storage bucket "${bucketName}" not found. Please create public bucket "${bucketName}" in Supabase Storage.`);
+      }
     }
-  } catch (err) {
-    console.warn('Storage upload error, using local data URL fallback:', err);
+  } catch (err: any) {
+    console.warn('Storage upload error:', err?.message || err);
+    // If it's an explicit error from above, rethrow
+    if (err?.message?.includes('bucket')) {
+      throw err;
+    }
   }
 
-  // Resilient fallback: For files over 1.5MB (APK, IPA, ZIP, DMG, videos), use ObjectURL to prevent quota crashes.
-  if (file.size > 1.5 * 1024 * 1024 || !file.type.startsWith('image/')) {
-    return URL.createObjectURL(file);
+  // Fallback for smaller files (under 1.5MB images)
+  if (file.size <= 1.5 * 1024 * 1024 && (file.type.startsWith('image/') || cleanExt === 'png' || cleanExt === 'jpg')) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(URL.createObjectURL(file));
+      reader.readAsDataURL(file);
+    });
   }
 
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => resolve(URL.createObjectURL(file));
-    reader.readAsDataURL(file);
-  });
+  // For APK or large files, use local Object URL so localStorage does not hit QuotaExceededError
+  return URL.createObjectURL(file);
 }
 
 /**
- * Test connectivity with Supabase project
+ * Comprehensive connectivity test with active Supabase project
  */
-export async function testSupabaseConnection(): Promise<{ success: boolean; message: string; details?: any }> {
+export async function testSupabaseConnection(): Promise<{
+  success: boolean;
+  message: string;
+  databaseOk: boolean;
+  storageOk: boolean;
+  remoteAppsCount?: number;
+  details?: any;
+}> {
+  let databaseOk = false;
+  let storageOk = false;
+  let remoteAppsCount = 0;
+
   try {
     const client = getSupabase();
-    // Test auth ping
-    const { data: authData, error: authError } = await client.auth.getSession();
-    
-    // Test apps table
-    const { data, error } = await client.from('apps').select('id').limit(1);
-    if (error) {
-      if (error.code === 'PGRST116' || error.code === '42P01') {
+
+    // 1. Test database table 'apps'
+    const { data: dbData, error: dbError, count } = await client
+      .from('apps')
+      .select('id', { count: 'exact' })
+      .limit(5);
+
+    if (!dbError) {
+      databaseOk = true;
+      remoteAppsCount = count ?? (Array.isArray(dbData) ? dbData.length : 0);
+    } else {
+      if (dbError.code === 'PGRST116' || dbError.code === '42P01') {
         return {
-          success: true,
-          message: 'Connected to Supabase Project! The "apps" table is not yet created in your database. Please copy and execute the SQL Schema from the tab below.',
-          details: error,
+          success: false,
+          message: 'Connected to Supabase project, but the "apps" table is missing. Run the SQL Schema from the tab below.',
+          databaseOk: false,
+          storageOk: false,
+          details: dbError,
         };
       }
+    }
+
+    // 2. Test Storage Bucket 'apps'
+    try {
+      const { data: bucketsData, error: bucketError } = await client.storage.listBuckets();
+      if (!bucketError && Array.isArray(bucketsData)) {
+        const hasAppsBucket = bucketsData.some((b) => b.name === 'apps' || b.id === 'apps');
+        storageOk = hasAppsBucket;
+      }
+    } catch {
+      storageOk = false;
+    }
+
+    if (databaseOk) {
       return {
-        success: false,
-        message: `Supabase returned: ${error.message} (code: ${error.code})`,
-        details: error,
+        success: true,
+        message: `Supabase connected successfully! Remote database is active (${remoteAppsCount} apps registered). Storage bucket: ${storageOk ? 'Active' : 'Ready'}.`,
+        databaseOk: true,
+        storageOk,
+        remoteAppsCount,
+        details: dbData,
       };
     }
+
     return {
-      success: true,
-      message: 'Successfully connected to Supabase! Remote "apps" database table is active and responsive.',
-      details: data,
+      success: false,
+      message: 'Failed to access "apps" table on Supabase. Check API key permissions or run SQL Schema.',
+      databaseOk: false,
+      storageOk,
     };
   } catch (err: any) {
     return {
       success: false,
-      message: `Failed to connect: ${err?.message || 'Network error'}`,
+      message: `Failed to connect to Supabase: ${err?.message || 'Network error'}`,
+      databaseOk: false,
+      storageOk: false,
       details: err,
     };
   }

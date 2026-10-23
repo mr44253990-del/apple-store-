@@ -14,9 +14,21 @@ import { SearchTab } from './components/SearchTab.tsx';
 import { AdminPanel } from './components/AdminPanel.tsx';
 import { AppDetailModal } from './components/AppDetailModal.tsx';
 import { LoginModal } from './components/LoginModal.tsx';
+import { ShareLinkModal } from './components/ShareLinkModal.tsx';
 
 const StoreContent: React.FC = () => {
-  const { currentTab, selectedApp, setSelectedApp, apps, settings, user, generateAppLink, copyAppLink } = useAppStore();
+  const {
+    currentTab,
+    selectedApp,
+    setSelectedApp,
+    sharingApp,
+    setSharingApp,
+    apps,
+    settings,
+    user,
+    generateAppLink,
+    copyAppLink,
+  } = useAppStore();
   const [pwaInstallPrompt, setPwaInstallPrompt] = useState<any>(null);
   const [showPwaBanner, setShowPwaBanner] = useState(false);
 
@@ -170,6 +182,11 @@ const StoreContent: React.FC = () => {
       {/* Full App Detail View / Modal */}
       {selectedApp && (
         <AppDetailModal app={selectedApp} onClose={() => setSelectedApp(null)} />
+      )}
+
+      {/* Share & QR Code Link Generator Modal */}
+      {sharingApp && (
+        <ShareLinkModal app={sharingApp} onClose={() => setSharingApp(null)} />
       )}
 
       {/* Apple ID Login Modal */}

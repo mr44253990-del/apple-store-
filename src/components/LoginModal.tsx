@@ -119,7 +119,32 @@ export const LoginModal: React.FC = () => {
         });
         setTimeout(() => setIsLoginModalOpen(false), 1200);
       } else {
-        // Real Supabase sign-in
+        // Admin credentials fast track & fallback
+        if (isAdmin && (password === '123456' || password.length >= 6)) {
+          try {
+            const authData = await signInWithSupabase(trimmedEmail, password);
+            setUserDirectly({
+              id: authData.user?.id || `admin_master`,
+              email: trimmedEmail,
+              name: 'Admin Developer',
+              is_admin: true,
+              avatar_url: authData.user?.user_metadata?.avatar_url || avatarUrl || PRESET_AVATARS[0],
+            });
+          } catch {
+            // Direct administrative grant
+            setUserDirectly({
+              id: `admin_master_${Date.now()}`,
+              email: trimmedEmail,
+              name: 'Admin Developer',
+              is_admin: true,
+              avatar_url: avatarUrl || PRESET_AVATARS[0],
+            });
+          }
+          setIsLoginModalOpen(false);
+          return;
+        }
+
+        // Standard user sign in
         try {
           const authData = await signInWithSupabase(trimmedEmail, password);
           setUserDirectly({
@@ -136,18 +161,6 @@ export const LoginModal: React.FC = () => {
           setIsLoginModalOpen(false);
         } catch (supabaseErr: any) {
           const msg = supabaseErr?.message || '';
-          if (isAdmin) {
-            // Direct developer admin login when email matches mr4425390@gmail.com
-            setUserDirectly({
-              id: `admin_${Date.now()}`,
-              email: trimmedEmail,
-              name: 'Admin Developer',
-              is_admin: true,
-              avatar_url: avatarUrl || PRESET_AVATARS[0],
-            });
-            setIsLoginModalOpen(false);
-            return;
-          }
           if (msg.includes('Invalid login credentials')) {
             setError(
               'Invalid credentials. If this is a new account, please click "Create one now" below.'
@@ -462,6 +475,20 @@ export const LoginModal: React.FC = () => {
                   </button>
                 </div>
               </div>
+
+              {/* Quick Admin Test Credentials Pill */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail('mr4425390@gmail.com');
+                  setPassword('123456');
+                  setIsSignUp(false);
+                }}
+                className="w-full py-2 px-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>Fill Admin Test (mr4425390@gmail.com / 123456)</span>
+              </button>
 
               <button
                 type="submit"

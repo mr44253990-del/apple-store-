@@ -6,6 +6,7 @@ import {
   signOutFromSupabase,
   incrementAppDownloadInSupabase,
   updateUserProfileMetadata,
+  sanitizeForSupabase,
 } from '../lib/supabase.ts';
 import confetti from 'canvas-confetti';
 
@@ -13,6 +14,7 @@ interface AppContextType {
   apps: AppItem[];
   reviews: Record<string, ReviewItem[]>;
   selectedApp: AppItem | null;
+  sharingApp: AppItem | null;
   currentTab: 'today' | 'games' | 'apps' | 'arcade' | 'search' | 'admin';
   searchQuery: string;
   selectedTag: string | null;
@@ -27,6 +29,7 @@ interface AppContextType {
   supabaseErrorNotice: string | null;
   // Handlers
   setSelectedApp: (app: AppItem | null) => void;
+  setSharingApp: (app: AppItem | null) => void;
   setCurrentTab: (tab: 'today' | 'games' | 'apps' | 'arcade' | 'search' | 'admin') => void;
   setSearchQuery: (query: string) => void;
   setSelectedTag: (tag: string | null) => void;
@@ -41,6 +44,7 @@ interface AppContextType {
   triggerDownload: (app: AppItem) => void;
   updateSettings: (newSettings: Partial<AppSettings>) => void;
   refreshFromSupabase: () => Promise<void>;
+  syncAllAppsToSupabase: () => Promise<{ success: boolean; syncedCount: number; message: string }>;
   clearAllDemoData: () => void;
   // Application Link Generator
   generateAppLink: (app: AppItem) => string;
@@ -61,6 +65,15 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+// Safe localStorage setter to prevent quota overflow crashes with large files
+function safeSetLocalStorage(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e: any) {
+    console.warn(`localStorage save note for "${key}":`, e?.message || e);
+  }
+}
+
 // Helper to get local custom published apps safely
 function getLocalPublishedApps(): AppItem[] {
   try {
@@ -75,17 +88,18 @@ function getLocalPublishedApps(): AppItem[] {
   return [];
 }
 
-// Resilient remote Supabase insertion helper that falls back gracefully if remote schema is missing newly added columns
+// Resilient remote Supabase insertion helper that sanitizes fields against remote PostgreSQL schema
 async function resilientInsertApp(client: any, app: AppItem): Promise<{ ok: boolean; error?: any }> {
   try {
-    const { error } = await client.from('apps').insert([app]);
+    const cleanApp = sanitizeForSupabase(app);
+    const { error } = await client.from('apps').upsert([cleanApp], { onConflict: 'id' });
     if (!error) return { ok: true };
 
     const errMsg = (error.message || '').toLowerCase();
     if (errMsg.includes('column') || errMsg.includes('schema') || errMsg.includes('does not exist')) {
       // Retry without newer columns in case user hasn't run the latest migration SQL yet
-      const { video_url, compatibility, languages, downloads_count, release_notes, ...fallbackApp } = app as any;
-      const retry = await client.from('apps').insert([fallbackApp]);
+      const { video_url, compatibility, languages, ...fallbackApp } = cleanApp;
+      const retry = await client.from('apps').upsert([fallbackApp], { onConflict: 'id' });
       if (!retry.error) return { ok: true };
       return { ok: false, error: retry.error };
     }
@@ -172,6 +186,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [selectedApp, setSelectedApp] = useState<AppItem | null>(null);
+  const [sharingApp, setSharingApp] = useState<AppItem | null>(null);
   const [currentTab, setCurrentTab] = useState<'today' | 'games' | 'apps' | 'arcade' | 'search' | 'admin'>('today');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -182,17 +197,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'synced' | 'local' | 'error'>('local');
   const [supabaseErrorNotice, setSupabaseErrorNotice] = useState<string | null>(null);
 
-  // Persistence to local storage
+  // Persistence to local storage with safe setter
   useEffect(() => {
-    localStorage.setItem('appstore_apps_data_v2', JSON.stringify(apps));
+    safeSetLocalStorage('appstore_apps_data_v2', JSON.stringify(apps));
   }, [apps]);
 
   useEffect(() => {
-    localStorage.setItem('appstore_reviews_data_v2', JSON.stringify(reviews));
+    safeSetLocalStorage('appstore_reviews_data_v2', JSON.stringify(reviews));
   }, [reviews]);
 
   useEffect(() => {
-    localStorage.setItem('appstore_settings_data', JSON.stringify(settings));
+    safeSetLocalStorage('appstore_settings_data', JSON.stringify(settings));
     if (settings.theme_mode === 'dark' || (settings.theme_mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
     } else {
@@ -413,13 +428,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const currentLocal = getLocalPublishedApps();
     const updatedLocal = currentLocal.map((a) => (a.id === appToSave.id ? appToSave : a));
-    localStorage.setItem('appstore_published_apps_v2', JSON.stringify(updatedLocal));
+    safeSetLocalStorage('appstore_published_apps_v2', JSON.stringify(updatedLocal));
 
     try {
       const client = getSupabase();
-      await client.from('apps').update(appToSave).eq('id', appToSave.id);
-    } catch (err) {
-      console.warn('Supabase cloud update queued locally:', err);
+      const cleanApp = sanitizeForSupabase(appToSave);
+      const { error } = await client.from('apps').update(cleanApp).eq('id', appToSave.id);
+      if (error) {
+        console.warn('Supabase app update notice:', error.message);
+        // If update failed because record didn't exist remotely, insert it!
+        await resilientInsertApp(client, appToSave);
+      } else {
+        setCloudSyncStatus('synced');
+        setSupabaseErrorNotice(null);
+      }
+    } catch (err: any) {
+      console.warn('Supabase cloud update queued locally:', err?.message || err);
     }
   };
 
@@ -431,13 +455,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const currentLocal = getLocalPublishedApps();
     const updatedLocal = currentLocal.filter((a) => a.id !== id);
-    localStorage.setItem('appstore_published_apps_v2', JSON.stringify(updatedLocal));
+    safeSetLocalStorage('appstore_published_apps_v2', JSON.stringify(updatedLocal));
 
     try {
       const client = getSupabase();
-      await client.from('apps').delete().eq('id', id);
+      const { error } = await client.from('apps').delete().eq('id', id);
+      if (error) {
+        console.warn('Supabase app delete notice:', error.message);
+      }
     } catch (err) {
       console.warn('Supabase cloud delete queued locally:', err);
+    }
+  };
+
+  /**
+   * One-click mass sync: takes all apps currently in state and persists them to Supabase PostgreSQL table.
+   * Eliminates the "everything stays in local" problem immediately.
+   */
+  const syncAllAppsToSupabase = async (): Promise<{ success: boolean; syncedCount: number; message: string }> => {
+    try {
+      setIsLoadingCloud(true);
+      const client = getSupabase();
+      if (apps.length === 0) {
+        return { success: true, syncedCount: 0, message: 'No apps to synchronize.' };
+      }
+
+      const payloads = apps.map((a) => sanitizeForSupabase(a));
+      const { error } = await client.from('apps').upsert(payloads, { onConflict: 'id' });
+
+      if (error) {
+        console.warn('Supabase bulk upsert error, trying resilient fallback per app:', error.message);
+        let successCount = 0;
+        for (const app of apps) {
+          const res = await resilientInsertApp(client, app);
+          if (res.ok) successCount++;
+        }
+        if (successCount > 0) {
+          setCloudSyncStatus('synced');
+          setSupabaseErrorNotice(null);
+          await refreshFromSupabase();
+          return {
+            success: true,
+            syncedCount: successCount,
+            message: `Successfully synchronized ${successCount} of ${apps.length} app(s) to Supabase cloud!`,
+          };
+        } else {
+          throw error;
+        }
+      }
+
+      setCloudSyncStatus('synced');
+      setSupabaseErrorNotice(null);
+      await refreshFromSupabase();
+      return {
+        success: true,
+        syncedCount: apps.length,
+        message: `Successfully synchronized all ${apps.length} app(s) directly to Supabase cloud!`,
+      };
+    } catch (err: any) {
+      console.error('Supabase mass sync failed:', err);
+      setSupabaseErrorNotice(`Sync failed: ${err?.message || 'Check database connection'}`);
+      return {
+        success: false,
+        syncedCount: 0,
+        message: `Failed to push apps to Supabase: ${err?.message || 'Unknown error'}. Make sure the "apps" table exists in your Supabase project.`,
+      };
+    } finally {
+      setIsLoadingCloud(false);
     }
   };
 
@@ -683,6 +767,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         apps,
         reviews,
         selectedApp,
+        sharingApp,
         currentTab,
         searchQuery,
         selectedTag,
@@ -696,6 +781,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         cloudSyncStatus,
         supabaseErrorNotice,
         setSelectedApp,
+        setSharingApp,
         setCurrentTab,
         setSearchQuery,
         setSelectedTag,
@@ -710,6 +796,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         triggerDownload,
         updateSettings,
         refreshFromSupabase,
+        syncAllAppsToSupabase,
         clearAllDemoData,
         generateAppLink,
         copyAppLink,
